@@ -1,0 +1,238 @@
+.hospitals-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  padding: 1.5rem 2.5rem 2.5rem;
+}
+
+.hospitals-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hospitals-label {
+  margin: 0 0 0.3rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hospitals-title {
+  margin: 0;
+  font-size: 1.6rem;
+  color: var(--text-primary);
+}
+
+.hospitals-breadcrumb {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hospitals-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  align-items: center;
+}
+
+.kpi-card {
+  background: var(--surface-elevated);
+  border-radius: 16px;
+  padding: 1rem 1.2rem;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 0.3rem;
+}
+
+.kpi-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.kpi-card strong {
+  font-size: 1.2rem;
+}
+
+.kpi-search {
+  background: var(--surface-elevated);
+  border-radius: 16px;
+  padding: 0.5rem 1rem;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+}
+
+.kpi-search input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.9rem;
+}
+
+.hospitals-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  background: var(--surface-elevated);
+  padding: 1rem 1.2rem;
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+}
+
+.hospitals-filters label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.hospitals-filters input,
+.hospitals-filters select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 34, 65, 0.1);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  background: #f8fafc;
+}
+
+.hospitals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.4rem;
+}
+
+.hospital-card {
+  background: var(--surface-elevated);
+  border-radius: 18px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 120px 1fr;
+}
+
+.hospital-thumb {
+  background: linear-gradient(140deg, #7ad4ff, #4c8dff);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.hospital-body {
+  padding: 1rem 1.1rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.hospital-body h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.hospital-location {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hospital-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.hospital-stats p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.hospital-stats span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.hospital-occupancy {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.occupancy-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(76, 141, 255, 0.2);
+  overflow: hidden;
+}
+
+.occupancy-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #4c8dff, #7ad4ff);
+}
+
+.hospital-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.hospitals-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.assignment-chart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 1rem;
+  align-items: end;
+  height: 160px;
+}
+
+.assignment-bar {
+  display: grid;
+  gap: 0.5rem;
+  align-items: end;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.assignment-bar span {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(76, 141, 255, 0.85), rgba(116, 230, 255, 0.5));
+}
+
+.performance-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.performance-list strong {
+  font-size: 1.1rem;
+}
+
+.performance-list p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .hospital-card {
+    grid-template-columns: 1fr;
+  }
+
+  .hospitals-summary {
+    grid-template-columns: 1fr;
+  }
+}
