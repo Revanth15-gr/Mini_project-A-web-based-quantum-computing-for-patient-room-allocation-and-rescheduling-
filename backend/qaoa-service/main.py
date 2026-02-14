@@ -67,7 +67,7 @@ def solve_qaoa(cost_matrix: List[List[float]], patients: List[Patient], rooms: L
         )
 
     sampler = Sampler()
-    qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=50), reps=1)
+    qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=20), reps=1)
     optimizer = MinimumEigenOptimizer(qaoa)
     result = optimizer.solve(qp)
 
@@ -116,10 +116,12 @@ def optimize(payload: OptimizeRequest):
     if not payload.rooms or not payload.patients:
         raise HTTPException(status_code=400, detail="Rooms and patients are required")
 
-    if len(payload.patients) > 6 or len(payload.rooms) > 6:
+    # QAOA simulation has exponential memory requirements
+    # Limit to 8 patients/rooms to avoid memory errors (2^64 states)
+    if len(payload.patients) > 8 or len(payload.rooms) > 8:
         raise HTTPException(
             status_code=400,
-            detail="QAOA demo supports up to 6 patients and 6 rooms",
+            detail="QAOA quantum simulation supports up to 8 patients and 8 rooms due to memory constraints. For larger optimizations, use classical algorithms.",
         )
 
     if payload.costMatrix is not None:

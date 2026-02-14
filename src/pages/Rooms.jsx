@@ -1,4 +1,4 @@
-import { useContext, useMemo } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
 
 function Rooms() {
@@ -6,20 +6,23 @@ function Rooms() {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
   }
 
-  const { rooms, patients } = useContext(HospitalContext)
+  const { rooms, patients, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
 
   const roomView = useMemo(() => {
-    const occupied = new Set(patients.map((patient) => patient.room))
-    return rooms.map((room, index) => {
-      const isOccupied = occupied.has(room.name)
-      const utilization = isOccupied ? 78 + (index % 3) * 6 : 35 + (index % 2) * 7
-      return {
-        ...room,
-        status: isOccupied ? 'Occupied' : 'Available',
-        utilization: `${utilization}%`,
-      }
-    })
-  }, [rooms, patients])
+    return rooms
+      .filter((room) => room.hospital === selectedHospital)
+      .map((room) => {
+        const patient = patients.find(
+          (p) => p.room === room.name && p.hospital === room.hospital
+        )
+        const isOccupied = !!patient
+        return {
+          ...room,
+          status: isOccupied ? 'Occupied' : 'Available',
+          patient: patient || null,
+        }
+      })
+  }, [rooms, patients, selectedHospital])
 
   return (
     <div className="page-grid">
@@ -27,15 +30,36 @@ function Rooms() {
         <div className="panel-header">
           <div>
             <h3>Room Availability</h3>
-            <p className="panel-subtitle">Quantum model confidence: 93%</p>
+            <p className="panel-subtitle">
+              {selectedHospital} - {roomView.filter((r) => r.status === 'Available').length} of{' '}
+              {roomView.length} available
+            </p>
           </div>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => pushAction('Updating room inventory...')}
-          >
-            Update Inventory
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select
+              value={selectedHospital}
+              onChange={(e) => setSelectedHospital(e.target.value)}
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(15, 34, 65, 0.1)',
+                fontSize: '0.9rem',
+              }}
+            >
+              {hospitals.map((hospital) => (
+                <option key={hospital} value={hospital}>
+                  {hospital}
+                </option>
+              ))}
+            </select>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => pushAction('Updating room inventory...')}
+            >
+              Update Inventory
+            </button>
+          </div>
         </div>
         <div className="card-grid">
           {roomView.map((room) => (
@@ -44,7 +68,9 @@ function Rooms() {
               className="room-card"
               onClick={() =>
                 pushAction(
-                  `${room.name} | Status: ${room.status} | Equipment: ${room.equipment}`
+                  room.patient
+                    ? `${room.name} | Patient: ${room.patient.name} | Care: ${room.patient.care} | Status: ${room.patient.status}`
+                    : `${room.name} | Status: Available | Equipment: ${room.equipment}`
                 )
               }
               style={{ cursor: 'pointer' }}
@@ -53,11 +79,19 @@ function Rooms() {
                 <h4>{room.name}</h4>
                 <span className="badge">{room.status}</span>
               </div>
-              <p className="room-meta">Utilization {room.utilization}</p>
-              <p className="room-meta">{room.equipment}</p>
-              <div className="room-progress">
-                <span style={{ width: room.utilization }} />
-              </div>
+              {room.patient ? (
+                <>
+                  <p className="room-meta"><strong>Patient:</strong> {room.patient.name}</p>
+                  <p className="room-meta"><strong>Care:</strong> {room.patient.care}</p>
+                  <p className="room-meta"><strong>Status:</strong> {room.patient.status}</p>
+                  <p className="room-meta"><strong>Next:</strong> {room.patient.next}</p>
+                </>
+              ) : (
+                <>
+                  <p className="room-meta"><strong>Equipment:</strong> {room.equipment}</p>
+                  <p className="room-meta" style={{ color: '#4c8dff' }}>Ready for assignment</p>
+                </>
+              )}
             </article>
           ))}
         </div>

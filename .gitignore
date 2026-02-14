@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Environment and secrets
+.env
+.env.*
+
+# Python artifacts
+**/.venv/
+**/__pycache__/
+
+# Local test payloads
+test_patient_api.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

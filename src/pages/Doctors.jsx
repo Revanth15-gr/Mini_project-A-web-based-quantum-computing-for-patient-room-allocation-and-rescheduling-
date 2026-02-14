@@ -1,48 +1,20 @@
+import { useContext, useMemo, useState } from 'react'
+import { HospitalContext } from '../state/HospitalContext.jsx'
+
 function Doctors() {
-  const doctors = [
-    {
-      name: 'Dr. A. Patel',
-      specialty: 'Cardiology',
-      status: 'On Duty',
-      patients: 18,
-      location: 'Visakhapatnam (విశాఖపట్నం), Andhra Pradesh',
-    },
-    {
-      name: 'Dr. R. Nair',
-      specialty: 'Neurology',
-      status: 'On Call',
-      patients: 12,
-      location: 'Guntur (గుంటూరు), Andhra Pradesh',
-    },
-    {
-      name: 'Dr. S. Iyer',
-      specialty: 'Orthopedics',
-      status: 'On Duty',
-      patients: 15,
-      location: 'Tirupati (తిరుపతి), Andhra Pradesh',
-    },
-    {
-      name: 'Dr. M. Singh',
-      specialty: 'Pediatrics',
-      status: 'Off Shift',
-      patients: 9,
-      location: 'Vijayawada (విజయవాడ), Andhra Pradesh',
-    },
-    {
-      name: 'Dr. S. Rao',
-      specialty: 'Emergency Medicine',
-      status: 'On Duty',
-      patients: 14,
-      location: 'Kakinada (కాకినాడ), Andhra Pradesh',
-    },
-    {
-      name: 'Dr. N. Reddy',
-      specialty: 'Pulmonology',
-      status: 'On Call',
-      patients: 11,
-      location: 'Nellore (నెల్లూరు), Andhra Pradesh',
-    },
-  ]
+  const { doctors, selectedHospital, addNotification } = useContext(HospitalContext)
+  const [districtFilter, setDistrictFilter] = useState('All Districts')
+  const [specialtyFilter, setSpecialtyFilter] = useState('All Specialties')
+
+  const filteredDoctors = useMemo(() => {
+    return doctors.filter((doctor) => {
+      const matchesDistrict =
+        districtFilter === 'All Districts' || doctor.district === districtFilter
+      const matchesSpecialty =
+        specialtyFilter === 'All Specialties' || doctor.specialty === specialtyFilter
+      return matchesDistrict && matchesSpecialty
+    })
+  }, [doctors, districtFilter, specialtyFilter])
 
   const pushAction = (message) => {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
@@ -54,39 +26,72 @@ function Doctors() {
         <div className="panel-header">
           <div>
             <h3>Doctor Directory</h3>
-            <p className="panel-subtitle">Availability and patient load</p>
+            <p className="panel-subtitle">{filteredDoctors.length} doctors across both districts</p>
           </div>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => pushAction('Add doctor form opened')}
-          >
-            Add Doctor
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select
+              value={districtFilter}
+              onChange={(e) => setDistrictFilter(e.target.value)}
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(15, 34, 65, 0.1)',
+                fontSize: '0.9rem',
+              }}
+            >
+              <option>All Districts</option>
+              <option>Coastal Andhra</option>
+              <option>Rayalaseema</option>
+            </select>
+            <select
+              value={specialtyFilter}
+              onChange={(e) => setSpecialtyFilter(e.target.value)}
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(15, 34, 65, 0.1)',
+                fontSize: '0.9rem',
+              }}
+            >
+              <option>All Specialties</option>
+              <option>Cardiology</option>
+              <option>Neurology</option>
+              <option>Orthopedics</option>
+              <option>Pediatrics</option>
+              <option>General Medicine</option>
+              <option>Emergency Care</option>
+              <option>Surgery</option>
+              <option>Radiology</option>
+              <option>Anesthesiology</option>
+              <option>Dermatology</option>
+            </select>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                addNotification('Add doctor form opened', 'info')
+                pushAction('Add doctor form opened')
+              }}
+            >
+              Add Doctor
+            </button>
+          </div>
         </div>
         <div className="table">
           <div className="table-row table-head">
             <span>Name</span>
             <span>Specialty</span>
-            <span>Location</span>
+            <span>Hospital</span>
+            <span>District</span>
             <span>Status</span>
-            <span>Patients</span>
-            <span>Action</span>
           </div>
-          {doctors.map((doctor) => (
-            <div key={doctor.name} className="table-row">
+          {filteredDoctors.map((doctor) => (
+            <div key={doctor.id} className="table-row">
               <span className="table-strong">{doctor.name}</span>
               <span>{doctor.specialty}</span>
-              <span>{doctor.location}</span>
+              <span style={{ fontSize: '0.85rem' }}>{doctor.hospital}</span>
+              <span>{doctor.district}</span>
               <span className="badge">{doctor.status}</span>
-              <span>{doctor.patients}</span>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => pushAction(`Viewing profile for ${doctor.name}`)}
-              >
-                View
-              </button>
             </div>
           ))}
         </div>
@@ -95,20 +100,29 @@ function Doctors() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h3>Performance Highlights</h3>
-            <p className="panel-subtitle">Monthly care impact</p>
+            <h3>Doctor Performance</h3>
+            <p className="panel-subtitle">Monthly summary in rupees</p>
           </div>
         </div>
         <div className="stats-row">
-          {[
-            'Patient Satisfaction 4.7/5',
-            'Avg. Response Time 12 mins',
-            'Successful Transfers 92%',
-          ].map((item) => (
-            <div key={item} className="stat-card">
-              <p>{item}</p>
-            </div>
-          ))}
+          {(() => {
+            const totalSalary = filteredDoctors.reduce((sum, d) => sum + d.salary, 0)
+            const avgSalary = filteredDoctors.length > 0 ? totalSalary / filteredDoctors.length : 0
+            const totalPatients = filteredDoctors.reduce((sum, d) => sum + d.patients, 0)
+            const estimatedRevenue = totalPatients * 2500 // ₹2500 per patient consultation
+            
+            return [
+              { label: 'Total Monthly Payroll', value: `₹${totalSalary.toLocaleString('en-IN')}` },
+              { label: 'Average Salary', value: `₹${Math.floor(avgSalary).toLocaleString('en-IN')}` },
+              { label: 'Est. Monthly Revenue', value: `₹${estimatedRevenue.toLocaleString('en-IN')}` },
+              { label: 'Total Patients', value: totalPatients.toString() },
+            ].map((item) => (
+              <div key={item.label} className="stat-card">
+                <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>{item.label}</p>
+                <strong style={{ fontSize: '1.3rem', color: '#0f2241' }}>{item.value}</strong>
+              </div>
+            ))
+          })()}
         </div>
       </section>
     </div>

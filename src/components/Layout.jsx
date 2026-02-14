@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import SideNav from './SideNav.jsx'
 import TopNav from './TopNav.jsx'
+import Notifications from './Notifications.jsx'
 
 function Layout() {
   const [actionMessage, setActionMessage] = useState('')
@@ -43,6 +44,7 @@ function Layout() {
           <Outlet />
         </main>
       </div>
+      <Notifications />
     </div>
   )
 }

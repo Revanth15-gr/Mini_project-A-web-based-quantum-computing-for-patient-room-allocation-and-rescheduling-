@@ -31,6 +31,14 @@ const hospitalStatus = [
     distance: '4.2 km',
     statusTone: 'full',
   },
+  {
+    name: 'Kakinada Coastal Medical',
+    available: '4 Beds',
+    doctors: '3',
+    readiness: 'Ready',
+    distance: '5.1 km',
+    statusTone: 'ready',
+  },
 ]
 
 const quickActions = [

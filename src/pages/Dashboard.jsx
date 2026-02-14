@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
 
-const rooms = ['Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105', 'Room 106']
+const rooms = ['Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105', 'Room 106', 'Room 107', 'Room 108', 'Room 109', 'Room 110', 'Room 111', 'Room 112', 'Room 113', 'Room 114', 'Room 115', 'Room 116', 'Room 117', 'Room 118', 'Room 119', 'Room 120']
 const times = ['7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '2:00 PM']
 
 const assignments = [
@@ -104,7 +104,7 @@ function pushAction(message) {
 }
 
 function Dashboard() {
-  const { patients } = useContext(HospitalContext)
+  const { patients, rooms: roomInventory, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
   const [optimizing, setOptimizing] = useState(false)
   const [activeTab, setActiveTab] = useState('scheduler')
   const [qaoaResult, setQaoaResult] = useState(null)
@@ -112,43 +112,74 @@ function Dashboard() {
 
   const qaoaPatients = useMemo(
     () =>
-      patients.slice(0, 6).map((patient, index) => ({
-        id: patient.name,
-        priority: 1.2 - index * 0.05,
-      })),
-    [patients]
+      patients
+        .filter((p) => p.hospital === selectedHospital)
+        .slice(0, 6)
+        .map((patient, index) => ({
+          id: patient.name,
+          priority: 1.2 - index * 0.05,
+        })),
+    [patients, selectedHospital]
   )
 
-  const dynamicAssignments = useMemo(() => {
-    return patients
-      .filter((patient) => patient.room && patient.room !== 'Unassigned')
-      .map((patient, index) => ({
-        time: times[times.length - 1],
-        room: patient.room,
-        name: patient.name,
-        note: patient.care,
-        tone: index % 2 === 0 ? 'cool' : 'mint',
-      }))
-  }, [patients])
+  const currentRoomAssignments = useMemo(() => {
+    const assignmentMap = {}
+    patients
+      .filter((p) => p.hospital === selectedHospital)
+      .forEach((patient) => {
+        if (patient.room && patient.room !== 'Unassigned') {
+          assignmentMap[patient.room] = patient
+        }
+      })
+    return assignmentMap
+  }, [patients, selectedHospital])
+
+  const hospitalRooms = useMemo(
+    () => roomInventory.filter((r) => r.hospital === selectedHospital),
+    [roomInventory, selectedHospital]
+  )
 
   const handleOptimize = async () => {
     setOptimizing(true)
     setQaoaError('')
     try {
+      // QAOA quantum simulation limited to 8 patients/rooms due to memory constraints
+      const maxQaoaSize = 8
+      const roomNames = hospitalRooms.slice(0, maxQaoaSize).map((r) => r.name)
+      const qaoaPayload = qaoaPatients.slice(0, maxQaoaSize)
+      
+      if (qaoaPatients.length === 0) {
+        setQaoaError('No patients in selected hospital to optimize')
+        setOptimizing(false)
+        return
+      }
+
+      if (qaoaPatients.length > maxQaoaSize) {
+        setQaoaError(`Note: Optimizing first ${maxQaoaSize} of ${qaoaPatients.length} patients due to quantum simulation memory limits`)
+      }
+      
+      console.log('QAOA Request:', { 
+        patients: qaoaPayload,
+        rooms: roomNames,
+      })
+      
       const response = await fetch('/api/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rooms, patients: qaoaPatients }),
+        body: JSON.stringify({ patients: qaoaPayload, rooms: roomNames }),
       })
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        throw new Error(errorPayload.detail || 'Failed to run QAOA')
+        console.error('QAOA Error Response:', errorPayload)
+        throw new Error(errorPayload.detail || `QAOA returned ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('QAOA Result:', data)
       setQaoaResult(data)
     } catch (error) {
+      console.error('QAOA Error:', error)
       setQaoaError(error.message || 'Unable to reach QAOA service')
     } finally {
       setOptimizing(false)
@@ -243,9 +274,29 @@ function Dashboard() {
           <div className="panel-header">
             <div>
               <h3>Schedule Overview</h3>
-              <p className="panel-subtitle">April 21-23, 2024</p>
+              <p className="panel-subtitle">
+                {selectedHospital} -{' '}
+                {Object.keys(currentRoomAssignments).length} of {hospitalRooms.length} rooms
+                occupied
+              </p>
             </div>
             <div className="panel-actions">
+              <select
+                value={selectedHospital}
+                onChange={(e) => setSelectedHospital(e.target.value)}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(15, 34, 65, 0.1)',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {hospitals.map((hospital) => (
+                  <option key={hospital} value={hospital}>
+                    {hospital}
+                  </option>
+                ))}
+              </select>
               <button className="chip" onClick={() => pushAction('Today view selected')}>
                 Today
               </button>
@@ -302,47 +353,48 @@ function Dashboard() {
           {activeTab === 'scheduler' && (
             <div className="scheduler">
               <div className="scheduler-row scheduler-head">
-                <div className="scheduler-cell time-cell">Time</div>
-                {rooms.map((room) => (
-                  <div key={room} className="scheduler-cell room-cell">
-                    {room}
-                  </div>
-                ))}
+                <div className="scheduler-cell time-cell">Room</div>
+                <div className="scheduler-cell">Patient</div>
+                <div className="scheduler-cell">Status</div>
+                <div className="scheduler-cell">Care Type</div>
+                <div className="scheduler-cell">Next Appointment</div>
+                <div className="scheduler-cell">Equipment</div>
               </div>
-              {times.map((time) => (
-                <div key={time} className="scheduler-row">
-                  <div className="scheduler-cell time-cell">{time}</div>
-                  {rooms.map((room) => {
-                    const slot = getAssignment(time, room)
-                    const liveSlot =
-                      slot ||
-                      dynamicAssignments.find(
-                        (item) => item.time === time && item.room === room
-                      )
-                    return (
-                      <div
-                        key={`${time}-${room}`}
-                        className="scheduler-cell"
-                        onClick={() =>
-                          liveSlot
-                            ? pushAction(`Selected: ${liveSlot.name} at ${time}`)
-                            : pushAction(`Available slot at ${time}`)
-                        }
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {liveSlot ? (
-                          <div className={`slot slot-${liveSlot.tone}`}>
-                            <p className="slot-name">{liveSlot.name}</p>
-                            <p className="slot-note">{liveSlot.note}</p>
-                          </div>
-                        ) : (
-                          <div className="slot slot-empty">Available</div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              ))}
+              {hospitalRooms.map((roomInfo) => {
+                const patient = currentRoomAssignments[roomInfo.name]
+                return (
+                  <div key={`${roomInfo.hospital}-${roomInfo.name}`} className="scheduler-row">
+                    <div className="scheduler-cell time-cell">{roomInfo.name}</div>
+                    <div className="scheduler-cell">
+                      {patient ? (
+                        <span style={{ fontWeight: 600 }}>{patient.name}</span>
+                      ) : (
+                        <span style={{ color: '#5c6a85', fontStyle: 'italic' }}>Available</span>
+                      )}
+                    </div>
+                    <div className="scheduler-cell">
+                      {patient ? (
+                        <span className={`status-pill ${patient.status === 'Stable' ? 'ready' : patient.status === 'Observation' ? 'limited' : 'full'}`}>
+                          {patient.status}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </div>
+                    <div className="scheduler-cell">
+                      {patient ? patient.care : '-'}
+                    </div>
+                    <div className="scheduler-cell">
+                      {patient ? patient.next : '-'}
+                    </div>
+                    <div className="scheduler-cell">
+                      <span style={{ fontSize: '0.85rem', color: '#5c6a85' }}>
+                        {roomInfo?.equipment || '-'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
           {activeTab === 'constraints' && (
