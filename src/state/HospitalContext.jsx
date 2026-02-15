@@ -1,4 +1,4 @@
-import { createContext, useMemo, useState } from 'react'
+import { createContext, useEffect, useMemo, useState } from 'react'
 
 const HospitalContext = createContext(null)
 
@@ -152,6 +152,37 @@ function HospitalProvider({ children }) {
     return roomInventory.filter((room) => !occupied.has(room.name))
   }, [patients])
 
+  // Rotate doctor statuses every 3 hours
+  useEffect(() => {
+    const statusRotation = ['On Duty', 'On Call', 'Off Shift']
+    
+    const rotateStatuses = () => {
+      setDoctors((current) =>
+        current.map((doctor) => {
+          const currentIndex = statusRotation.indexOf(doctor.status)
+          const nextIndex = (currentIndex + 1) % statusRotation.length
+          const newStatus = statusRotation[nextIndex]
+          
+          // Update in MongoDB
+          fetch(`/api/doctors/${doctor._id || doctor.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          }).catch((err) => console.warn(`⚠️ Could not update ${doctor.name} status:`, err.message))
+          
+          return { ...doctor, status: newStatus }
+        })
+      )
+      console.log('🔄 Doctor statuses rotated every 3 hours')
+    }
+
+    // Rotate immediately, then every 3 hours (10,800,000 ms)
+    rotateStatuses()
+    const interval = setInterval(rotateStatuses, 3 * 60 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   const addPatient = async (patient) => {
     // Find available rooms for the patient's hospital before state update
     const occupiedForHospital = new Set(
@@ -286,6 +317,39 @@ function HospitalProvider({ children }) {
     }, 5000)
   }
 
+  const rotateAllDoctorStatuses = async () => {
+    const statusRotation = ['On Duty', 'On Call', 'Off Shift']
+    
+    const updated = await Promise.all(
+      doctors.map(async (doctor) => {
+        const currentIndex = statusRotation.indexOf(doctor.status)
+        const nextIndex = (currentIndex + 1) % statusRotation.length
+        const newStatus = statusRotation[nextIndex]
+        
+        // Update in MongoDB
+        try {
+          const response = await fetch(`/api/doctors/${doctor._id || doctor.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          })
+          
+          if (response.ok) {
+            return { ...doctor, status: newStatus }
+          } else {
+            return doctor
+          }
+        } catch (error) {
+          console.warn(`⚠️ Could not update ${doctor.name} status:`, error.message)
+          return doctor
+        }
+      })
+    )
+    
+    setDoctors(updated)
+    addNotification('✓ All doctor statuses rotated', 'success')
+  }
+
   const value = {
     rooms: roomInventory,
     patients,
@@ -296,6 +360,7 @@ function HospitalProvider({ children }) {
     setSelectedHospital,
     doctors,
     addDoctor,
+    rotateAllDoctorStatuses,
     notifications,
     addNotification,
   }

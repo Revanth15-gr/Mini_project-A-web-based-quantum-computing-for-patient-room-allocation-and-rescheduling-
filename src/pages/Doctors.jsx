@@ -2,7 +2,7 @@ import { useContext, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
 
 function Doctors() {
-  const { doctors, selectedHospital, addDoctor, addNotification, hospitals } = useContext(HospitalContext)
+  const { doctors, selectedHospital, addDoctor, addNotification, hospitals, rotateAllDoctorStatuses } = useContext(HospitalContext)
   const [districtFilter, setDistrictFilter] = useState('All Districts')
   const [specialtyFilter, setSpecialtyFilter] = useState('All Specialties')
   const [showForm, setShowForm] = useState(false)
@@ -114,6 +114,16 @@ function Doctors() {
               onClick={() => setShowForm((current) => !current)}
             >
               {showForm ? 'Close Form' : 'Add Doctor'}
+            </button>
+            <button
+              className="outline-button"
+              type="button"
+              onClick={() => {
+                rotateAllDoctorStatuses()
+                pushAction('Doctor statuses rotated for shift management')
+              }}
+            >
+              Rotate Statuses
             </button>
           </div>
         </div>

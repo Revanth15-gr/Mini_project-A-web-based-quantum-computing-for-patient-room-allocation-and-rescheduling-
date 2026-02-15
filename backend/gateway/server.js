@@ -148,9 +148,15 @@ app.post('/api/doctors', async (req, res) => {
 
 app.put('/api/doctors/:id', async (req, res) => {
   try {
+    console.log(`📝 Updating doctor ${req.params.id} with:`, req.body)
     const doctor = await Doctor.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' })
+    }
+    console.log(`✅ Doctor updated:`, doctor)
     res.json(doctor)
   } catch (error) {
+    console.error(`❌ Doctor update error:`, error.message)
     res.status(400).json({ error: error.message })
   }
 })
