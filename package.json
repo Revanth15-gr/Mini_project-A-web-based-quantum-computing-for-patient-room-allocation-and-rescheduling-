@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "dev:gateway": "node backend/gateway/server.js",
-    "dev:qaoa": "powershell -NoProfile -Command \"& 'C:/Users/lucky/Desktop/mini project imp/backend/qaoa-service/.venv/Scripts/python.exe' -m uvicorn main:app --reload --app-dir backend/qaoa-service\"",
+    "dev:qaoa": "python -m uvicorn main:app --reload --app-dir backend/qaoa-service",
     "dev:all": "concurrently -k -n WEB,GATEWAY,QAOA -c cyan,magenta,green \"npm run dev\" \"npm run dev:gateway\" \"npm run dev:qaoa\"",
-    "build": "vite build",
+    "build": "npm --prefix backend/gateway install && python -m pip install -r backend/qaoa-service/requirements.txt && vite build",
+    "postinstall": "npm --prefix backend/gateway install && python -m pip install -r backend/qaoa-service/requirements.txt",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: mini-project-app
+    runtime: node
+    runtimeVersion: 22
+    buildCommand: npm install && npm --prefix backend/gateway install && npm run build
+    startCommand: node backend/gateway/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+

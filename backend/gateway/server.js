@@ -23,6 +23,10 @@ const MONGODB_URI = process.env.MONGODB_URI
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
+// Serve static React build files in production
+const distPath = path.resolve(path.join(__dirname, '../../dist'))
+app.use(express.static(distPath))
+
 let dbConnected = false
 
 // MongoDB Connection (non-blocking)
@@ -304,6 +308,11 @@ app.post('/api/seed', async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message })
   }
+})
+
+// SPA fallback: serve index.html for all non-API routes (for React Router)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'))
 })
 
 app.listen(PORT, () => {
