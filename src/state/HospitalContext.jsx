@@ -143,6 +143,7 @@ const seedPatients = [
 
 function HospitalProvider({ children }) {
   const [patients, setPatients] = useState(seedPatients)
+  const [doctors, setDoctors] = useState(doctorInventory)
   const [selectedHospital, setSelectedHospital] = useState('Vizag City Care Hospital')
   const [notifications, setNotifications] = useState([])
 
@@ -232,6 +233,46 @@ function HospitalProvider({ children }) {
     }
   }
 
+  const addDoctor = async (doctor) => {
+    try {
+      const newDoctor = {
+        ...doctor,
+        id: Date.now(),
+        patients: 0,
+      }
+
+      // POST to MongoDB via gateway API
+      console.log('📤 Sending doctor to MongoDB:', newDoctor)
+
+      const response = await fetch('/api/doctors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDoctor),
+      })
+
+      console.log('📥 Response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ API Error:', errorText)
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const savedDoctor = await response.json()
+      console.log('✅ Doctor saved to MongoDB:', savedDoctor)
+      setDoctors((current) => [savedDoctor, ...current])
+      addNotification(`✓ Doctor ${doctor.name} added successfully`, 'success')
+      return savedDoctor
+    } catch (error) {
+      console.error('🔴 Error adding doctor to MongoDB:', error)
+      addNotification(`⚠️ Error: ${error.message}`, 'error')
+      // Fallback: add to local state
+      const newDoctor = { ...doctor, id: Date.now(), patients: 0 }
+      setDoctors((current) => [newDoctor, ...current])
+      return newDoctor
+    }
+  }
+
   const addNotification = (message, type = 'error') => {
     const id = Date.now()
     setNotifications((current) => [...current, { id, message, type }])
@@ -248,7 +289,8 @@ function HospitalProvider({ children }) {
     hospitals: hospitalNames,
     selectedHospital,
     setSelectedHospital,
-    doctors: doctorInventory,
+    doctors,
+    addDoctor,
     notifications,
     addNotification,
   }
