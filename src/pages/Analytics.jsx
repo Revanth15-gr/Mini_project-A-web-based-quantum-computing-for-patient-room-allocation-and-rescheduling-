@@ -1,3 +1,26 @@
+const hospitalLocations = {
+  'Vizag City Care Hospital': { lat: 17.6869, lng: 83.2185, district: 'Coastal Andhra' },
+  'Vijayawada Heart Institute': { lat: 16.5062, lng: 80.6480, district: 'Coastal Andhra' },
+  'Guntur Neuro Center': { lat: 16.3067, lng: 80.4365, district: 'Coastal Andhra' },
+  'Kakinada Coastal Medical': { lat: 16.9891, lng: 82.2475, district: 'Coastal Andhra' },
+  'Rajahmundry River Hospital': { lat: 17.0689, lng: 81.7771, district: 'Coastal Andhra' },
+  'Machilipatnam Port Medical': { lat: 15.7497, lng: 80.1489, district: 'Coastal Andhra' },
+  'Eluru District Hospital': { lat: 16.3131, lng: 81.0994, district: 'Coastal Andhra' },
+  'Amalapuram Regional Care': { lat: 16.5778, lng: 82.0415, district: 'Coastal Andhra' },
+  'Ongole Medical Institute': { lat: 14.6349, lng: 79.9789, district: 'Rayalaseema' },
+  'Nellore Emergency & Critical Care': { lat: 14.4426, lng: 79.9864, district: 'Rayalaseema' },
+  'Tirupati Ortho & Trauma Hospital': { lat: 13.1939, lng: 79.8965, district: 'Rayalaseema' },
+  'Anantapur Heart Center': { lat: 13.1887, lng: 77.6051, district: 'Rayalaseema' },
+  'Kurnool Multi-Specialty Hospital': { lat: 15.8281, lng: 78.8353, district: 'Rayalaseema' },
+  'Kadapa Regional Medical': { lat: 14.4697, lng: 79.1367, district: 'Rayalaseema' },
+  'Chittoor Women & Child Care': { lat: 13.1939, lng: 79.1059, district: 'Rayalaseema' },
+  'Nandyal District Hospital': { lat: 14.4838, lng: 78.4867, district: 'Rayalaseema' },
+  'Proddatur Eye & ENT Center': { lat: 14.7505, lng: 78.5750, district: 'Rayalaseema' },
+  'Hindupur Community Hospital': { lat: 13.8298, lng: 79.4900, district: 'Rayalaseema' },
+  'Dharmavaram Diabetes Center': { lat: 13.7465, lng: 79.1267, district: 'Rayalaseema' },
+  'Madanapalle Maternity Hospital': { lat: 13.3400, lng: 79.1366, district: 'Rayalaseema' },
+}
+
 const hospitalStatus = [
   {
     name: 'Vizag City Care Hospital',
@@ -48,21 +71,35 @@ const quickActions = [
   'Dismiss Alert',
 ]
 
-function Analytics() {
+function Emergency() {
   const pushAction = (message) => {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
+  }
+
+  // Calculate map coordinates (Andhra Pradesh bounds: roughly 12°N to 19°N, 77°E to 84°E)
+  const getMapPosition = (lat, lng) => {
+    const mapWidth = 600
+    const mapHeight = 500
+    const minLat = 12
+    const maxLat = 19
+    const minLng = 77
+    const maxLng = 84
+    
+    const x = ((lng - minLng) / (maxLng - minLng)) * mapWidth
+    const y = mapHeight - ((lat - minLat) / (maxLat - minLat)) * mapHeight
+    return { x, y }
   }
 
   return (
     <div className="emergency-page">
       <div className="emergency-header">
         <div>
-          <h2>Analytics</h2>
-          <p className="panel-subtitle">Quantum-Based Patient Room Allocation</p>
+          <h2>Emergency Management</h2>
+          <p className="panel-subtitle">Real-time hospital location mapping & response</p>
         </div>
         <div className="emergency-search">
           <span className="search-icon" aria-hidden="true" />
-          <input type="search" placeholder="Search" aria-label="Search" />
+          <input type="search" placeholder="Search hospitals..." aria-label="Search" />
         </div>
       </div>
 
@@ -98,18 +135,89 @@ function Analytics() {
 
       <div className="emergency-grid">
         <section className="panel map-panel">
-          <div className="map-canvas">
-            <div className="map-route" />
-            <div className="map-ambulance">AMB 108</div>
-            <div className="map-pin pin-1">Vizag City • 1.4 km</div>
-            <div className="map-pin pin-2">Vijayawada • 2.6 km</div>
-            <div className="map-pin pin-3">Guntur • 3.3 km</div>
-            <div className="map-pin pin-4">Tirupati • 4.2 km</div>
+          <div className="map-canvas" style={{ position: 'relative', width: '100%', height: '500px', background: 'linear-gradient(135deg, #e8f4f8 0%, #f0fbff 100%)', borderRadius: '8px', overflow: 'hidden' }}>
+            <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+              {/* Andhra Pradesh map outline (simplified) */}
+              <defs>
+                <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.3" />
+                </filter>
+              </defs>
+              
+              {/* Coastal Andhra region */}
+              <g opacity="0.1" fill="lightblue">
+                <path d="M 100 50 L 400 80 L 450 300 L 300 350 Z" />
+              </g>
+              
+              {/* Rayalaseema region */}
+              <g opacity="0.1" fill="lightyellow">
+                <path d="M 100 50 L 300 350 L 500 400 L 550 200 L 400 80 Z" />
+              </g>
+              
+              {/* Hospital markers */}
+              {Object.entries(hospitalLocations).map(([name, coords], idx) => {
+                const { x, y } = getMapPosition(coords.lat, coords.lng)
+                const isNearby = idx < 5 // First 5 are "nearby" for this example
+                
+                return (
+                  <g key={name}>
+                    {/* Hospital location circle */}
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={isNearby ? '8' : '6'}
+                      fill={isNearby ? '#ef4444' : '#3b82f6'}
+                      stroke="white"
+                      strokeWidth="2"
+                      filter="url(#shadow)"
+                      opacity="0.9"
+                    />
+                    {/* Hospital label */}
+                    <text
+                      x={x}
+                      y={y - 12}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill="#0f2241"
+                      fontWeight="bold"
+                      pointerEvents="none"
+                    >
+                      {name.split(' ')[0]}
+                    </text>
+                  </g>
+                )
+              })}
+              
+              {/* Ambulance location (emergency marker) */}
+              <g>
+                <circle cx="250" cy="200" r="12" fill="#fbbf24" stroke="#f59e0b" strokeWidth="2" filter="url(#shadow)" />
+                <text x="250" y="206" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold" pointerEvents="none">🚑</text>
+              </g>
+            </svg>
+            
+            {/* Map legend */}
+            <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'white', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }} />
+                  <span>Nearby Hospital</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6' }} />
+                  <span>Other Hospital</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontSize: '16px' }}>🚑</div>
+                  <span>Ambulance</span>
+                </div>
+              </div>
+            </div>
           </div>
+          
           <div className="panel-header">
             <div>
-              <h3>Hospital Status Overview</h3>
-              <p className="panel-subtitle">Live status and ETA details</p>
+              <h3>Andhra Pradesh Hospital Network Map</h3>
+              <p className="panel-subtitle">20 hospitals across Coastal Andhra & Rayalaseema</p>
             </div>
           </div>
           <div className="status-table">
@@ -200,4 +308,4 @@ function Analytics() {
   )
 }
 
-export default Analytics
+export default Emergency
