@@ -7,6 +7,7 @@ const links = [
   { to: '/rooms', label: 'Rooms' },
   { to: '/doctors', label: 'Doctors' },
   { to: '/analytics', label: 'Analytics' },
+  { to: '/discharges', label: 'Discharge History' },
   { to: '/settings', label: 'Settings' },
 ]
 

@@ -9,7 +9,17 @@ function PatientsInfo() {
   const [showForm, setShowForm] = useState(false)
   const [isRescheduling, setIsRescheduling] = useState(false)
   const [reschedulingResult, setReschedulingResult] = useState(null)
-  const { rooms, patients, addPatient, hospitals, selectedHospital, setSelectedHospital, addNotification } = useContext(HospitalContext)
+  const [searchTerm, setSearchTerm] = useState('')
+  const {
+    rooms,
+    patients,
+    addPatient,
+    removePatient,
+    hospitals,
+    selectedHospital,
+    setSelectedHospital,
+    addNotification,
+  } = useContext(HospitalContext)
   const [formData, setFormData] = useState({
     name: '',
     status: 'Stable',
@@ -35,6 +45,12 @@ function PatientsInfo() {
         !occupied.has(`${room.hospital}-${room.name}`)
     )
   }, [patients, rooms, formData.hospital])
+
+  const filteredPatients = useMemo(() => {
+    return patients.filter((patient) =>
+      patient.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [patients, searchTerm])
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -220,19 +236,30 @@ function PatientsInfo() {
             </div>
           </form>
         ) : null}
-        <div className="table">
-          <div className="table-row table-head">
+        <div className="panel-search">
+          <span className="search-icon" aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Search patient by name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Search patients"
+          />
+        </div>
+        <div className="table table-7">
+          <div className="table-row table-head table-row-7">
             <span>Patient</span>
             <span>Hospital</span>
             <span>Status</span>
             <span>Room</span>
             <span>Care Path</span>
             <span>Next Check</span>
+            <span>Action</span>
           </div>
-          {patients.map((patient) => (
+          {filteredPatients.map((patient) => (
             <div
               key={patient.name}
-              className="table-row"
+              className="table-row table-row-7"
               onClick={() =>
                 pushAction(
                   `Patient: ${patient.name} | Hospital: ${patient.hospital} | Status: ${patient.status} | Room: ${patient.room}`
@@ -246,6 +273,17 @@ function PatientsInfo() {
               <span>{patient.room}</span>
               <span>{patient.care}</span>
               <span>{patient.next}</span>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={async (event) => {
+                  event.stopPropagation()
+                  await removePatient(patient)
+                  pushAction(`Discharged ${patient.name} • Room freed`)
+                }}
+              >
+                Discharge
+              </button>
             </div>
           ))}
         </div>

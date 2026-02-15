@@ -199,6 +199,39 @@ function HospitalProvider({ children }) {
     }
   }
 
+  const removePatient = async (patient) => {
+    try {
+      const response = await fetch('/api/discharges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: patient._id,
+          name: patient.name,
+          status: patient.status,
+          room: patient.room,
+          hospital: patient.hospital,
+          care: patient.care,
+          reason: 'Discharged',
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `HTTP ${response.status}`)
+      }
+
+      if (patient._id) {
+        await fetch(`/api/patients/${patient._id}`, { method: 'DELETE' })
+      }
+
+      setPatients((current) =>
+        current.filter((item) => item.name !== patient.name)
+      )
+    } catch (error) {
+      addNotification(`Error saving discharge: ${error.message}`, 'error')
+    }
+  }
+
   const addNotification = (message, type = 'error') => {
     const id = Date.now()
     setNotifications((current) => [...current, { id, message, type }])
@@ -211,6 +244,7 @@ function HospitalProvider({ children }) {
     rooms: roomInventory,
     patients,
     addPatient,
+    removePatient,
     hospitals: hospitalNames,
     selectedHospital,
     setSelectedHospital,

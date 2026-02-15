@@ -7,6 +7,7 @@ import PatientsInfo from './pages/PatientsInfo.jsx'
 import Rooms from './pages/Rooms.jsx'
 import Doctors from './pages/Doctors.jsx'
 import Analytics from './pages/Analytics.jsx'
+import DischargeHistory from './pages/DischargeHistory.jsx'
 import Settings from './pages/Settings.jsx'
 import './App.css'
 
@@ -21,6 +22,7 @@ function App() {
           <Route path="rooms" element={<Rooms />} />
           <Route path="doctors" element={<Doctors />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="discharges" element={<DischargeHistory />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

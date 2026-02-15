@@ -3,12 +3,17 @@ import axios from 'axios'
 import cors from 'cors'
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { Hospital } from './models/Hospital.js'
 import { Room } from './models/Room.js'
 import { Doctor } from './models/Doctor.js'
 import { Patient } from './models/Patient.js'
+import { Discharge } from './models/Discharge.js'
 
-dotenv.config()
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+dotenv.config({ path: path.join(__dirname, '.env') })
 
 const app = express()
 const PORT = process.env.PORT || 4000
@@ -211,6 +216,34 @@ app.delete('/api/patients/:id', async (req, res) => {
     }
     
     res.json({ message: 'Patient deleted' })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// ===== DISCHARGES API =====
+app.get('/api/discharges', async (req, res) => {
+  try {
+    if (!dbConnected) {
+      return res.status(503).json({ error: 'Database not connected' })
+    }
+    const discharges = await Discharge.find().sort({ dischargedAt: -1 })
+    res.json(discharges)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post('/api/discharges', async (req, res) => {
+  try {
+    if (!dbConnected) {
+      return res.status(503).json({ error: 'Database not connected' })
+    }
+    if (!req.body?.name) {
+      return res.status(400).json({ error: 'Patient name is required' })
+    }
+    const discharge = await Discharge.create(req.body)
+    res.status(201).json(discharge)
   } catch (error) {
     res.status(400).json({ error: error.message })
   }
