@@ -135,8 +135,12 @@ function Emergency() {
 
       <div className="emergency-grid">
         <section className="panel map-panel">
-          <div className="map-canvas" style={{ position: 'relative', width: '100%', height: '500px', background: 'linear-gradient(135deg, #e8f4f8 0%, #f0fbff 100%)', borderRadius: '8px', overflow: 'hidden' }}>
-            <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+          <div className="map-canvas" style={{ position: 'relative', width: '100%', height: '500px', background: 'linear-gradient(135deg, #e8f4f8 0%, #f0fbff 100%)', borderRadius: '8px', overflow: 'hidden', border: '1px solid #d1e9f6' }}>
+            <svg 
+              viewBox="0 0 600 500" 
+              style={{ width: '100%', height: '100%', display: 'block' }}
+              xmlns="http://www.w3.org/2000/svg"
+            >
               {/* Andhra Pradesh map outline (simplified) */}
               <defs>
                 <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -144,20 +148,20 @@ function Emergency() {
                 </filter>
               </defs>
               
-              {/* Coastal Andhra region */}
-              <g opacity="0.1" fill="lightblue">
+              {/* Coastal Andhra region background */}
+              <g opacity="0.08" fill="#3b82f6">
                 <path d="M 100 50 L 400 80 L 450 300 L 300 350 Z" />
               </g>
               
-              {/* Rayalaseema region */}
-              <g opacity="0.1" fill="lightyellow">
+              {/* Rayalaseema region background */}
+              <g opacity="0.08" fill="#f59e0b">
                 <path d="M 100 50 L 300 350 L 500 400 L 550 200 L 400 80 Z" />
               </g>
               
               {/* Hospital markers */}
               {Object.entries(hospitalLocations).map(([name, coords], idx) => {
                 const { x, y } = getMapPosition(coords.lat, coords.lng)
-                const isNearby = idx < 5 // First 5 are "nearby" for this example
+                const isNearby = idx < 5
                 
                 return (
                   <g key={name}>
@@ -165,7 +169,7 @@ function Emergency() {
                     <circle
                       cx={x}
                       cy={y}
-                      r={isNearby ? '8' : '6'}
+                      r={isNearby ? 8 : 6}
                       fill={isNearby ? '#ef4444' : '#3b82f6'}
                       stroke="white"
                       strokeWidth="2"
@@ -175,9 +179,9 @@ function Emergency() {
                     {/* Hospital label */}
                     <text
                       x={x}
-                      y={y - 12}
+                      y={y - 15}
                       textAnchor="middle"
-                      fontSize="11"
+                      fontSize="10"
                       fill="#0f2241"
                       fontWeight="bold"
                       pointerEvents="none"
@@ -189,25 +193,24 @@ function Emergency() {
               })}
               
               {/* Ambulance location (emergency marker) */}
-              <g>
-                <circle cx="250" cy="200" r="12" fill="#fbbf24" stroke="#f59e0b" strokeWidth="2" filter="url(#shadow)" />
-                <text x="250" y="206" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold" pointerEvents="none">🚑</text>
-              </g>
+              <circle cx="250" cy="200" r="12" fill="#fbbf24" stroke="#f59e0b" strokeWidth="2" filter="url(#shadow)" />
+              <text x="250" y="207" textAnchor="middle" fontSize="14" fill="white" fontWeight="bold" pointerEvents="none">🚑</text>
             </svg>
             
             {/* Map legend */}
-            <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'white', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ position: 'absolute', bottom: '15px', left: '15px', background: 'white', padding: '10px 15px', borderRadius: '6px', fontSize: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', zIndex: 10 }}>
+              <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', fontSize: '11px' }}>Hospital Network</p>
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }} />
-                  <span>Nearby Hospital</span>
+                  <span>Nearby (Red)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6' }} />
-                  <span>Other Hospital</span>
+                  <span>Other (Blue)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ fontSize: '16px' }}>🚑</div>
+                  <div style={{ fontSize: '14px' }}>🚑</div>
                   <span>Ambulance</span>
                 </div>
               </div>
@@ -217,7 +220,7 @@ function Emergency() {
           <div className="panel-header">
             <div>
               <h3>Andhra Pradesh Hospital Network Map</h3>
-              <p className="panel-subtitle">20 hospitals across Coastal Andhra & Rayalaseema</p>
+              <p className="panel-subtitle">20 hospitals across Coastal Andhra & Rayalaseema districts</p>
             </div>
           </div>
           <div className="status-table">
