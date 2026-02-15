@@ -8,7 +8,7 @@
     "dev:gateway": "node backend/gateway/server.js",
     "dev:qaoa": "python -m uvicorn main:app --reload --app-dir backend/qaoa-service",
     "dev:all": "concurrently -k -n WEB,GATEWAY,QAOA -c cyan,magenta,green \"npm run dev\" \"npm run dev:gateway\" \"npm run dev:qaoa\"",
-    "build": "npm --prefix backend/gateway install && python -m pip install -r backend/qaoa-service/requirements.txt && vite build",
+    "build": "npm --prefix backend/gateway install && npx vite build",
     "postinstall": "npm --prefix backend/gateway install && python -m pip install -r backend/qaoa-service/requirements.txt",
     "lint": "eslint .",
     "preview": "vite preview"
