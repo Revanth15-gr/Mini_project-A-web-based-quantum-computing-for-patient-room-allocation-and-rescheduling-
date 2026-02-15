@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css'
+import 'leaflet-defaulticon-compatibility'
 
 const hospitalLocations = {
   'Vizag City Care Hospital': { lat: 17.6869, lng: 83.2185, district: 'Coastal Andhra', beds: 6, doctors: 4 },
@@ -82,123 +86,140 @@ function Emergency() {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
   }
 
-  // Initialize Google Map
+  // Initialize Leaflet Map
   useEffect(() => {
-    const loadGoogleMap = async () => {
-      // Load Google Maps API
-      const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyDZlTKZF6lPSKnPyEQQHJqFhKDU-jN4Z0g`
-      script.async = true
-      script.defer = true
-      
-      script.onload = () => {
-        if (mapRef.current && window.google) {
-          const andhraPradeshCenter = { lat: 15.4909, lng: 78.6569 }
-          
-          const map = new window.google.maps.Map(mapRef.current, {
-            zoom: 8,
-            center: andhraPradeshCenter,
-            mapTypeId: 'roadmap',
-            styles: [
-              {
-                featureType: 'all',
-                elementType: 'labels.text.fill',
-                stylers: [{ color: '#0f2241' }],
-              },
-              {
-                featureType: 'water',
-                elementType: 'geometry',
-                stylers: [{ color: '#c6e4f0' }],
-              },
-              {
-                featureType: 'land',
-                elementType: 'geometry',
-                stylers: [{ color: '#f5f5f5' }],
-              },
-            ],
-          })
-          
-          googleMapRef.current = map
-          
-          // Add hospital markers
-          Object.entries(hospitalLocations).forEach(([name, coords]) => {
-            const markerIcon = {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 10,
-              fillColor: coords.district === 'Coastal Andhra' ? '#ef4444' : '#3b82f6',
-              fillOpacity: 0.8,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            }
-            
-            const marker = new window.google.maps.Marker({
-              position: { lat: coords.lat, lng: coords.lng },
-              map: map,
-              title: name,
-              icon: markerIcon,
-            })
-            
-            // Add info window
-            const infoWindow = new window.google.maps.InfoWindow({
-              content: `
-                <div style="padding: 10px; font-family: Arial; font-size: 12px;">
-                  <h4 style="margin: 0 0 8px 0; color: #0f2241;">${name}</h4>
-                  <p style="margin: 4px 0; color: #555;">District: ${coords.district}</p>
-                  <p style="margin: 4px 0; color: #555;">Available Beds: ${coords.beds}</p>
-                  <p style="margin: 4px 0; color: #555;">ER Doctors: ${coords.doctors}</p>
-                </div>
-              `,
-            })
-            
-            marker.addListener('click', () => {
-              infoWindow.open(map, marker)
-              setSelectedHospital(name)
-              pushAction(`Selected hospital: ${name}`)
-            })
-          })
-          
-          // Add ambulance marker
-          const ambulanceIcon = {
-            path: 'M 0 0 L -2 4 L -0.5 6 L 0.5 6 L 2 4 Z',
-            scale: 3,
-            fillColor: '#fbbf24',
-            fillOpacity: 1,
-            strokeColor: '#f59e0b',
-            strokeWeight: 1,
-            rotation: 0,
-          }
-          
-          const ambulanceMarker = new window.google.maps.Marker({
-            position: { lat: 15.8243, lng: 78.6783 },
-            map: map,
-            title: 'Ambulance - Case #108',
-            icon: ambulanceIcon,
-          })
-          
-          const ambulanceInfoWindow = new window.google.maps.InfoWindow({
-            content: `
-              <div style="padding: 10px; font-family: Arial; font-size: 12px;">
-                <h4 style="margin: 0 0 8px 0; color: #0f2241;">🚑 Ambulance - Case #108</h4>
-                <p style="margin: 4px 0; color: #555;">Status: Arriving in 4 Min</p>
-                <p style="margin: 4px 0; color: #555;">Case: Severe Car Accident</p>
-                <p style="margin: 4px 0; color: #555;">Location: RTC Complex & MVP Colony</p>
-              </div>
-            `,
-          })
-          
-          ambulanceMarker.addListener('click', () => {
-            ambulanceInfoWindow.open(map, ambulanceMarker)
-          })
-        }
-      }
-      
-      document.head.appendChild(script)
+    if (!mapRef.current || googleMapRef.current) return
+
+    const andhraPradeshCenter = [15.4909, 78.6569] // [lat, lng]
+    
+    // Create map
+    const map = L.map(mapRef.current).setView(andhraPradeshCenter, 8)
+    
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map)
+    
+    googleMapRef.current = map
+    
+    // Create custom icon for hospitals
+    const createHospitalIcon = (district) => {
+      const color = district === 'Coastal Andhra' ? '#ef4444' : '#3b82f6'
+      return L.divIcon({
+        html: `
+          <div style="
+            background: ${color};
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-weight: bold;
+            color: white;
+            font-size: 12px;
+          ">🏥</div>
+        `,
+        iconSize: [24, 24],
+        className: 'hospital-icon',
+      })
     }
-
-    loadGoogleMap()
-
+    
+    // Add hospital markers
+    Object.entries(hospitalLocations).forEach(([name, coords]) => {
+      const marker = L.marker([coords.lat, coords.lng], {
+        icon: createHospitalIcon(coords.district),
+      }).addTo(map)
+      
+      const popupContent = `
+        <div style="font-family: Arial; font-size: 12px; min-width: 180px;">
+          <h4 style="margin: 0 0 8px 0; color: #0f2241; font-size: 14px;">${name}</h4>
+          <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+            <p style="margin: 4px 0; color: #555;"><strong>District:</strong> ${coords.district}</p>
+            <p style="margin: 4px 0; color: #555;"><strong>Available Beds:</strong> ${coords.beds}</p>
+            <p style="margin: 4px 0; color: #555;"><strong>ER Doctors:</strong> ${coords.doctors}</p>
+          </div>
+        </div>
+      `
+      
+      marker.bindPopup(popupContent, { 
+        maxWidth: 280,
+        className: 'hospital-popup'
+      })
+      
+      marker.on('click', () => {
+        setSelectedHospital(name)
+        pushAction(`Selected hospital: ${name}`)
+      })
+    })
+    
+    // Add ambulance marker
+    const ambulanceIcon = L.divIcon({
+      html: `
+        <div style="
+          background: #fbbf24;
+          border: 3px solid #f59e0b;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+          font-size: 18px;
+          animation: pulse 2s infinite;
+        ">🚑</div>
+      `,
+      iconSize: [32, 32],
+      className: 'ambulance-icon',
+    })
+    
+    const ambulanceMarker = L.marker([15.8243, 78.6783], {
+      icon: ambulanceIcon,
+    }).addTo(map)
+    
+    ambulanceMarker.bindPopup(`
+      <div style="font-family: Arial; font-size: 12px; min-width: 200px;">
+        <h4 style="margin: 0 0 8px 0; color: #0f2241; font-size: 14px;">🚑 Emergency Ambulance</h4>
+        <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+          <p style="margin: 4px 0; color: #555;"><strong>Case:</strong> #108</p>
+          <p style="margin: 4px 0; color: #555;"><strong>Incident:</strong> Severe Car Accident</p>
+          <p style="margin: 4px 0; color: #555;"><strong>Location:</strong> RTC Complex & MVP Colony</p>
+          <p style="margin: 4px 0; color: #555;"><strong>ETA:</strong> 4 Minutes</p>
+          <p style="margin: 4px 0; color: #f59e0b;"><strong>Status:</strong> In Transit</p>
+        </div>
+      </div>
+    `, {
+      maxWidth: 280,
+      className: 'ambulance-popup'
+    })
+    
+    ambulanceMarker.on('click', () => {
+      pushAction('Emergency ambulance case #108 - Severe car accident')
+    })
+    
+    // Add custom CSS for animations
+    if (!document.querySelector('style[data-map-animations]')) {
+      const style = document.createElement('style')
+      style.setAttribute('data-map-animations', 'true')
+      style.textContent = `
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.2); opacity: 0.8; }
+        }
+        .ambulance-icon { animation: pulse 2s infinite; }
+        .hospital-popup h4 { font-weight: bold; }
+        .ambulance-popup h4 { font-weight: bold; }
+      `
+      document.head.appendChild(style)
+    }
+    
     return () => {
-      // Cleanup
+      map.remove()
+      googleMapRef.current = null
     }
   }, [])
 
@@ -251,7 +272,6 @@ function Emergency() {
             ref={mapRef}
             className="map-canvas" 
             style={{ 
-              position: 'relative', 
               width: '100%', 
               height: '500px', 
               borderRadius: '8px', 
