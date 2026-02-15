@@ -136,9 +136,12 @@ app.get('/api/doctors', async (req, res) => {
 
 app.post('/api/doctors', async (req, res) => {
   try {
+    console.log('📤 Creating doctor with data:', req.body)
     const doctor = await Doctor.create(req.body)
+    console.log('✅ Doctor created:', doctor)
     res.status(201).json(doctor)
   } catch (error) {
+    console.error('❌ Doctor creation error:', error.message)
     res.status(400).json({ error: error.message })
   }
 })

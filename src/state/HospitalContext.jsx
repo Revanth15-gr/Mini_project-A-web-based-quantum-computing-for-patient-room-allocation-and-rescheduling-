@@ -235,19 +235,24 @@ function HospitalProvider({ children }) {
 
   const addDoctor = async (doctor) => {
     try {
-      const newDoctor = {
-        ...doctor,
-        id: Date.now(),
+      // Prepare data for MongoDB (no custom id field)
+      const doctorToSave = {
+        name: doctor.name,
+        specialty: doctor.specialty,
+        hospital: doctor.hospital,
+        district: doctor.district,
+        status: doctor.status,
+        salary: doctor.salary,
         patients: 0,
       }
 
       // POST to MongoDB via gateway API
-      console.log('📤 Sending doctor to MongoDB:', newDoctor)
+      console.log('📤 Sending doctor to MongoDB:', doctorToSave)
 
       const response = await fetch('/api/doctors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newDoctor),
+        body: JSON.stringify(doctorToSave),
       })
 
       console.log('📥 Response status:', response.status)
@@ -255,7 +260,7 @@ function HospitalProvider({ children }) {
       if (!response.ok) {
         const errorText = await response.text()
         console.error('❌ API Error:', errorText)
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
       }
 
       const savedDoctor = await response.json()

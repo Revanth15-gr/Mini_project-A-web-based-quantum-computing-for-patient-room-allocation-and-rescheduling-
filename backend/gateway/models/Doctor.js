@@ -6,7 +6,7 @@ const DoctorSchema = new mongoose.Schema(
     specialty: String,
     hospital: String,
     district: String,
-    status: { type: String, enum: ['Available', 'On Leave', 'Off Duty'], default: 'Available' },
+    status: { type: String, enum: ['On Duty', 'On Call', 'Off Shift'], default: 'On Duty' },
     patients: { type: Number, default: 0 },
     salary: { type: Number, default: 800000 },
   },
