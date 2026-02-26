@@ -291,6 +291,28 @@ function Emergency() {
     }
   }
 
+  const handleSendAlert = async () => {
+    if (!assignedHospital) {
+      addNotification('Please assign a hospital first before sending alert', 'warning')
+      pushAction('⚠️ Assign hospital first before sending alert')
+      return
+    }
+
+    pushAction('🚨 Sending emergency alert to hospitals...')
+    addNotification('Sending emergency alert to nearby hospitals...', 'info')
+
+    try {
+      // Simulate alert sending to hospitals
+      setTimeout(() => {
+        addNotification(`✓ Emergency alert sent to ${assignedHospital.name}`, 'success')
+        pushAction(`✓ Alert sent to ${assignedHospital.name} • ${selectedEmergency.patientName} • ${selectedEmergency.incident}`)
+      }, 1000)
+    } catch (error) {
+      addNotification(`Failed to send alert: ${error.message}`, 'error')
+      pushAction(`Error sending alert: ${error.message}`)
+    }
+  }
+
   // Initialize Leaflet Map
   useEffect(() => {
     if (!mapRef.current || googleMapRef.current) return
@@ -542,9 +564,10 @@ function Emergency() {
           <button
             className="primary-button"
             type="button"
-            onClick={() => pushAction('Sending emergency alert to nearest hospitals')}
+            onClick={handleSendAlert}
+            disabled={!assignedHospital}
           >
-            Send Alert
+            {assignedHospital ? '📤 Send Alert' : 'Assign Hospital First'}
           </button>
         </div>
       </section>
@@ -764,31 +787,54 @@ function Emergency() {
                 type="button"
                 onClick={handlePrepareERTeam}
               >
-                Prepare ER Team
+                🏥 Prepare ER Team
               </button>
               <button
                 className="ghost-button"
                 type="button"
                 onClick={handleSharePatientInfo}
               >
-                Share Patient Info
+                📋 Share Patient Info
               </button>
               <button
                 className="primary-button"
                 type="button"
                 onClick={handleAssignHospitalQAOA}
-                disabled={isAssigningHospital || assignedHospital !== null}
+                disabled={isAssigningHospital}
                 style={{ width: '100%' }}
               >
-                {isAssigningHospital ? 'Assigning...' : assignedHospital ? '✓ Hospital Assigned' : 'Assign Hospital (QAOA)'}
+                {isAssigningHospital ? '⏳ Assigning Hospital...' : assignedHospital ? `✓ ${assignedHospital.name}` : '🔍 Assign Hospital (QAOA)'}
+              </button>
+              {assignedHospital && (
+                <button
+                  className="outline-button"
+                  type="button"
+                  onClick={() => {
+                    setAssignedHospital(null)
+                    setSelectedHospital(null)
+                    pushAction('Hospital assignment cleared - ready to reassign')
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  🔄 Reassign Hospital
+                </button>
+              )}
+              <button
+                className="outline-button"
+                type="button"
+                onClick={handleSendAlert}
+                disabled={!assignedHospital}
+                style={{ width: '100%' }}
+              >
+                {assignedHospital ? '📤 Send Alert' : '⚠️ Assign Hospital First'}
               </button>
               <button
                 className="ghost-button"
                 type="button"
                 onClick={handleDismissAlert}
-                style={{ color: '#dc2626' }}
+                style={{ color: '#dc2626', width: '100%' }}
               >
-                Dismiss Alert
+                ❌ Dismiss Alert
               </button>
             </div>
           </section>
