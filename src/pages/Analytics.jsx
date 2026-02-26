@@ -112,8 +112,8 @@ const ambulanceFleet = [
   },
 ]
 
-// 3 Emergency Cases
-const emergencyCases = [
+// 3 Emergency Cases - Initial data
+const initialEmergencyCases = [
   {
     caseId: '#E001',
     incident: 'Severe Car Accident',
@@ -155,7 +155,8 @@ function Emergency() {
   const [selectedHospital, setSelectedHospital] = useState(null)
   const [selectedDistrict, setSelectedDistrict] = useState('All Districts')
   const [selectedAmbulance, setSelectedAmbulance] = useState(ambulanceFleet[0])
-  const [selectedEmergency, setSelectedEmergency] = useState(emergencyCases[0])
+  const [emergencyCases, setEmergencyCases] = useState(initialEmergencyCases)
+  const [selectedEmergency, setSelectedEmergency] = useState(initialEmergencyCases[0])
   const [isAssigningHospital, setIsAssigningHospital] = useState(false)
   const [assignedHospital, setAssignedHospital] = useState(null)
   const [showERDialog, setShowERDialog] = useState(false)
@@ -326,10 +327,24 @@ function Emergency() {
 
   const handleDismissAlert = () => {
     if (confirm('Are you sure you want to dismiss this emergency alert?')) {
+      // Remove the current emergency from the list
+      const updatedCases = emergencyCases.filter(e => e.caseId !== selectedEmergency.caseId)
+      setEmergencyCases(updatedCases)
+      
+      // Clear hospital assignments
       setAssignedHospital(null)
       setSelectedHospital(null)
-      pushAction('Emergency alert dismissed')
-      addNotification('Emergency alert dismissed', 'info')
+      
+      // Select the next emergency if available
+      if (updatedCases.length > 0) {
+        setSelectedEmergency(updatedCases[0])
+        pushAction(`Emergency ${selectedEmergency.caseId} dismissed - Switched to ${updatedCases[0].caseId}`)
+        addNotification(`Emergency ${selectedEmergency.caseId} dismissed`, 'info')
+      } else {
+        setSelectedEmergency(null)
+        pushAction('All emergency alerts cleared')
+        addNotification('All emergency cases dismissed', 'success')
+      }
     }
   }
 
@@ -634,43 +649,55 @@ function Emergency() {
         </div>
       </div>
 
-      <section className="alert-banner">
-        <div className="alert-left">
-          <span className="alert-badge">Emergency Alert</span>
-          <h3>Ambulance Reported Case: Nearby Hospitals Alert</h3>
-          <div className="alert-meta">
-            <span>Case {selectedEmergency.caseId}</span>
-            <span>Patient: {selectedEmergency.patientName}</span>
-            <span>{selectedEmergency.incident}</span>
-            <span>{selectedEmergency.location}</span>
-            <span>Ambulance ID: {selectedEmergency.ambulanceId}</span>
-            <span>Arriving in {selectedEmergency.eta}</span>
-            <span style={{ color: '#d97706', fontWeight: 'bold' }}>Severity: {selectedEmergency.severity}</span>
-            {assignedHospital && (
-              <span style={{ color: '#10b981', fontWeight: 'bold' }}>
-                ✓ Assigned: {assignedHospital.name}
-              </span>
-            )}
+      {selectedEmergency ? (
+        <section className="alert-banner">
+          <div className="alert-left">
+            <span className="alert-badge">Emergency Alert</span>
+            <h3>Ambulance Reported Case: Nearby Hospitals Alert</h3>
+            <div className="alert-meta">
+              <span>Case {selectedEmergency.caseId}</span>
+              <span>Patient: {selectedEmergency.patientName}</span>
+              <span>{selectedEmergency.incident}</span>
+              <span>{selectedEmergency.location}</span>
+              <span>Ambulance ID: {selectedEmergency.ambulanceId}</span>
+              <span>Arriving in {selectedEmergency.eta}</span>
+              <span style={{ color: '#d97706', fontWeight: 'bold' }}>Severity: {selectedEmergency.severity}</span>
+              {assignedHospital && (
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>
+                  ✓ Assigned: {assignedHospital.name}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="alert-actions">
-          <button
-            className="outline-button"
-            type="button"
-            onClick={() => pushAction('Opening live ambulance feed')}
-          >
-            View Live Feed
-          </button>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={handleSendAlert}
-            disabled={!assignedHospital}
-          >
-            {assignedHospital ? '📤 Send Alert' : 'Assign Hospital First'}
-          </button>
-        </div>
-      </section>
+          <div className="alert-actions">
+            <button
+              className="outline-button"
+              type="button"
+              onClick={() => pushAction('Opening live ambulance feed')}
+            >
+              View Live Feed
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={handleSendAlert}
+              disabled={!assignedHospital}
+            >
+              {assignedHospital ? '📤 Send Alert' : 'Assign Hospital First'}
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="alert-banner" style={{ background: '#f0fdf4', borderColor: '#10b981' }}>
+          <div className="alert-left">
+            <span className="alert-badge" style={{ background: '#10b981' }}>All Clear</span>
+            <h3>No Active Emergency Cases</h3>
+            <p style={{ margin: '0.5rem 0 0 0', color: '#666' }}>
+              All emergency cases have been handled. The system is monitoring for new incidents.
+            </p>
+          </div>
+        </section>
+      )}
 
       <div className="emergency-grid">
         <section className="panel map-panel">
@@ -746,12 +773,18 @@ function Emergency() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <h3>Active Emergency Cases (3)</h3>
-                <p className="panel-subtitle">Click to select an emergency</p>
+                <h3>Active Emergency Cases ({emergencyCases.length})</h3>
+                <p className="panel-subtitle">{emergencyCases.length > 0 ? 'Click to select an emergency' : 'No active emergencies'}</p>
               </div>
             </div>
             <div className="status-table">
-              {emergencyCases.map((emergency) => (
+              {emergencyCases.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>
+                  <p style={{ fontSize: '2rem', margin: '0 0 0.5rem 0' }}>✓</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>All emergency cases handled</p>
+                </div>
+              ) : (
+                emergencyCases.map((emergency) => (
                 <div 
                   key={emergency.caseId}
                   className="status-row"
@@ -787,117 +820,137 @@ function Emergency() {
                     </div>
                   </div>
                 </div>
-              ))}
+              )))
+              }
             </div>
           </section>
 
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <h3>Selected Case Details</h3>
-                <p className="panel-subtitle">{selectedEmergency.caseId}</p>
+          {selectedEmergency && (
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h3>Selected Case Details</h3>
+                  <p className="panel-subtitle">{selectedEmergency.caseId}</p>
+                </div>
+                <span className="alert-chip">{selectedEmergency.severity}</span>
               </div>
-              <span className="alert-chip">{selectedEmergency.severity}</span>
-            </div>
-            <div className="incoming-card">
-              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
-                <strong>Patient:</strong> {selectedEmergency.patientName}, {selectedEmergency.age} years
-              </p>
-              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
-                <strong>Incident:</strong> {selectedEmergency.incident}
-              </p>
-              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
-                <strong>Location:</strong> {selectedEmergency.location}
-              </p>
-              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
-                <strong>Injuries:</strong> {selectedEmergency.injuries}
-              </p>
-              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
-                <strong>Ambulance:</strong> {selectedEmergency.ambulanceId} (ETA: {selectedEmergency.eta})
-              </p>
-              <div className="incoming-actions">
+              <div className="incoming-card">
+                <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                  <strong>Patient:</strong> {selectedEmergency.patientName}, {selectedEmergency.age} years
+                </p>
+                <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                  <strong>Incident:</strong> {selectedEmergency.incident}
+                </p>
+                <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                  <strong>Location:</strong> {selectedEmergency.location}
+                </p>
+                <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                  <strong>Injuries:</strong> {selectedEmergency.injuries}
+                </p>
+                <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                  <strong>Ambulance:</strong> {selectedEmergency.ambulanceId} (ETA: {selectedEmergency.eta})
+                </p>
+                <div className="incoming-actions">
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => pushAction('Marked case as red entry')}
+                  >
+                    Red Entry
+                  </button>
+                  <button
+                    className="outline-button"
+                    type="button"
+                    onClick={() => pushAction('Dismissed incoming case alert')}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {!selectedEmergency && (
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h3>No Active Cases</h3>
+                  <p className="panel-subtitle">All emergencies resolved</p>
+                </div>
+              </div>
+              <div className="incoming-card" style={{ textAlign: 'center', padding: '2rem' }}>
+                <p style={{ fontSize: '2rem', margin: '0 0 0.5rem 0', color: '#10b981' }}>✓</p>
+                <p style={{ margin: 0, color: '#888' }}>No active emergency cases at this time</p>
+              </div>
+            </section>
+          )}
+
+          {selectedEmergency && (
+            <section className="panel quick-actions">
+              <div className="panel-header">
+                <div>
+                  <h3>Quick Actions</h3>
+                  <p className="panel-subtitle">Emergency protocol steps</p>
+                </div>
+              </div>
+              <div className="quick-list">
                 <button
                   className="ghost-button"
                   type="button"
-                  onClick={() => pushAction('Marked case as red entry')}
+                  onClick={handlePrepareERTeam}
                 >
-                  Red Entry
+                  🏥 Prepare ER Team
                 </button>
                 <button
-                  className="outline-button"
+                  className="ghost-button"
                   type="button"
-                  onClick={() => pushAction('Dismissed incoming case alert')}
+                  onClick={handleSharePatientInfo}
                 >
-                  Dismiss
+                  📋 Share Patient Info
                 </button>
-              </div>
-            </div>
-          </section>
-
-          <section className="panel quick-actions">
-            <div className="panel-header">
-              <div>
-                <h3>Quick Actions</h3>
-                <p className="panel-subtitle">Emergency protocol steps</p>
-              </div>
-            </div>
-            <div className="quick-list">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={handlePrepareERTeam}
-              >
-                🏥 Prepare ER Team
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={handleSharePatientInfo}
-              >
-                📋 Share Patient Info
-              </button>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={handleAssignHospitalQAOA}
-                disabled={isAssigningHospital}
-                style={{ width: '100%' }}
-              >
-                {isAssigningHospital ? '⏳ Assigning Hospital...' : assignedHospital ? `✓ ${assignedHospital.name}` : '🔍 Assign Hospital (QAOA)'}
-              </button>
-              {assignedHospital && (
                 <button
-                  className="outline-button"
+                  className="primary-button"
                   type="button"
-                  onClick={() => {
-                    setAssignedHospital(null)
-                    setSelectedHospital(null)
-                    pushAction('Hospital assignment cleared - ready to reassign')
-                  }}
+                  onClick={handleAssignHospitalQAOA}
+                  disabled={isAssigningHospital}
                   style={{ width: '100%' }}
                 >
-                  🔄 Reassign Hospital
+                  {isAssigningHospital ? '⏳ Assigning Hospital...' : assignedHospital ? `✓ ${assignedHospital.name}` : '🔍 Assign Hospital (QAOA)'}
                 </button>
-              )}
-              <button
-                className="outline-button"
-                type="button"
-                onClick={handleSendAlert}
-                disabled={!assignedHospital}
-                style={{ width: '100%' }}
-              >
-                {assignedHospital ? '📤 Send Alert' : '⚠️ Assign Hospital First'}
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={handleDismissAlert}
-                style={{ color: '#dc2626', width: '100%' }}
-              >
-                ❌ Dismiss Alert
-              </button>
-            </div>
-          </section>
+                {assignedHospital && (
+                  <button
+                    className="outline-button"
+                    type="button"
+                    onClick={() => {
+                      setAssignedHospital(null)
+                      setSelectedHospital(null)
+                      pushAction('Hospital assignment cleared - ready to reassign')
+                    }}
+                    style={{ width: '100%' }}
+                  >
+                    🔄 Reassign Hospital
+                  </button>
+                )}
+                <button
+                  className="outline-button"
+                  type="button"
+                  onClick={handleSendAlert}
+                  disabled={!assignedHospital}
+                  style={{ width: '100%' }}
+                >
+                  {assignedHospital ? '📤 Send Alert' : '⚠️ Assign Hospital First'}
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={handleDismissAlert}
+                  style={{ color: '#dc2626', width: '100%' }}
+                >
+                  ❌ Dismiss Alert
+                </button>
+              </div>
+            </section>
+          )}
         </aside>
       </div>
 
