@@ -152,6 +152,29 @@ function HospitalProvider({ children }) {
     return roomInventory.filter((room) => !occupied.has(room.name))
   }, [patients])
 
+  // Fetch existing patients from MongoDB on component mount
+  useEffect(() => {
+    const fetchPatientsFromDB = async () => {
+      try {
+        const response = await fetch('/api/patients')
+        if (response.ok) {
+          const data = await response.json()
+          // Handle both array and object with 'value' property
+          const patientsArray = Array.isArray(data) ? data : (data.value || [])
+          if (patientsArray.length > 0) {
+            console.log('✅ Loaded', patientsArray.length, 'patients from MongoDB')
+            setPatients(patientsArray)
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not fetch patients from MongoDB:', error.message)
+        console.log('Using seed data as fallback')
+      }
+    }
+
+    fetchPatientsFromDB()
+  }, [])
+
   // Rotate doctor statuses every 3 hours
   useEffect(() => {
     const statusRotation = ['On Duty', 'On Call', 'Off Shift']

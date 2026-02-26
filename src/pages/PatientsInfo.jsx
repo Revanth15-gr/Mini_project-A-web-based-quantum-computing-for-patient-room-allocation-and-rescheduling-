@@ -52,9 +52,10 @@ function PatientsInfo() {
 
   const filteredPatients = useMemo(() => {
     return patients.filter((patient) =>
+      patient.hospital === selectedHospital &&
       patient.name.toLowerCase().includes(searchTerm.toLowerCase())
     )
-  }, [patients, searchTerm])
+  }, [patients, searchTerm, selectedHospital])
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -299,6 +300,32 @@ function PatientsInfo() {
           <div>
             <h3>Patient Overview</h3>
             <p className="panel-subtitle">Live census with quantum priority tags</p>
+            <div style={{ marginTop: '0.75rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                <span>Hospital:</span>
+                <select 
+                  value={selectedHospital} 
+                  onChange={(e) => {
+                    setSelectedHospital(e.target.value)
+                    setSearchTerm('')
+                  }}
+                  style={{
+                    padding: '0.4rem 0.6rem',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    backgroundColor: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {hospitals.map((hospital) => (
+                    <option key={hospital} value={hospital}>
+                      {hospital}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
           <button
             className="primary-button"
