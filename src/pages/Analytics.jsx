@@ -694,46 +694,6 @@ function Emergency() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <h3>Ambulance Fleet (5)</h3>
-                <p className="panel-subtitle">Real-time locations</p>
-              </div>
-            </div>
-            <div className="status-table">
-              {ambulanceFleet.map((ambulance) => (
-                <div 
-                  key={ambulance.id}
-                  className="status-row"
-                  onClick={() => {
-                    setSelectedAmbulance(ambulance)
-                    pushAction(`Selected ${ambulance.id} - ${ambulance.status}`)
-                  }}
-                  style={{
-                    cursor: 'pointer',
-                    backgroundColor: selectedAmbulance?.id === ambulance.id ? '#fvef3c7' : 'transparent',
-                    padding: '0.75rem',
-                    borderRadius: '4px',
-                    marginBottom: '0.5rem',
-                    border: selectedAmbulance?.id === ambulance.id ? '2px solid #f59e0b' : '1px solid #e5e7eb'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <div>
-                      <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                        🚑 {ambulance.id}
-                      </p>
-                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#656565' }}>
-                        Status: {ambulance.status} | Condition: {ambulance.condition}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel">
-            <div className="panel-header">
-              <div>
                 <h3>Selected Case Details</h3>
                 <p className="panel-subtitle">{selectedEmergency.caseId}</p>
               </div>
