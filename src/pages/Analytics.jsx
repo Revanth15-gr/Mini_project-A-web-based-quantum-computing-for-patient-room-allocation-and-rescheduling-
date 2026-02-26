@@ -243,6 +243,48 @@ function Emergency() {
       setAssignedHospital(assignedData)
       setSelectedHospital(assignedHospitalName)
       
+      const assignedHospitalData = {
+        caseId: selectedEmergency.caseId,
+        ambulanceId: selectedEmergency.ambulanceId,
+        patientName: selectedEmergency.patientName,
+        age: selectedEmergency.age,
+        incident: selectedEmergency.incident,
+        location: selectedEmergency.location,
+        severity: selectedEmergency.severity,
+        injuries: selectedEmergency.injuries,
+        eta: selectedEmergency.eta,
+        assignedHospital: {
+          name: assignedHospitalName,
+          distance: assignedData.distance,
+          beds: assignedData.beds,
+          doctors: assignedData.doctors,
+          district: assignedData.coords.district,
+        },
+        status: 'Assigned'
+      }
+
+      // Save to MongoDB
+      try {
+        const mongoResponse = await fetch('/api/emergency-cases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(assignedHospitalData)
+        })
+        
+        if (mongoResponse.ok) {
+          const savedCase = await mongoResponse.json()
+          console.log('✅ Emergency case saved to MongoDB:', savedCase)
+          addNotification(`✓ Case ${selectedEmergency.caseId} saved to MongoDB`, 'success')
+        } else {
+          console.warn('⚠️ Could not save to MongoDB:', mongoResponse.status)
+        }
+      } catch (mongoError) {
+        console.warn('⚠️ MongoDB save failed:', mongoError.message)
+      }
+
+      setAssignedHospital(assignedData)
+      setSelectedHospital(assignedHospitalName)
+      
       addNotification(`✓ Hospital assigned: ${assignedHospitalName} (${assignedData.distance.toFixed(1)} km)`, 'success')
       pushAction(`Assigned ${assignedHospitalName} - ${assignedData.distance.toFixed(1)}km away, ${assignedData.beds} beds, ${assignedData.doctors} doctors`)
 
@@ -303,7 +345,65 @@ function Emergency() {
 
     try {
       // Simulate alert sending to hospitals
-      setTimeout(() => {
+      setTimeout(async () => {
+        // Update MongoDB with alert status
+        try {
+          // First, try to find the existing case
+          const fetchExisting = await fetch(`/api/emergency-cases?caseId=${selectedEmergency.caseId}`)
+          let existingCase = null
+          
+          if (fetchExisting.ok) {
+            const cases = await fetchExisting.json()
+            existingCase = cases.find(c => c.caseId === selectedEmergency.caseId)
+          }
+
+          const updateData = {
+            caseId: selectedEmergency.caseId,
+            ambulanceId: selectedEmergency.ambulanceId,
+            patientName: selectedEmergency.patientName,
+            age: selectedEmergency.age,
+            incident: selectedEmergency.incident,
+            location: selectedEmergency.location,
+            severity: selectedEmergency.severity,
+            injuries: selectedEmergency.injuries,
+            eta: selectedEmergency.eta,
+            assignedHospital: {
+              name: assignedHospital.name,
+              distance: assignedHospital.distance,
+              beds: assignedHospital.beds,
+              doctors: assignedHospital.doctors,
+              district: assignedHospital.coords.district,
+            },
+            status: 'In Transit'
+          }
+
+          if (existingCase) {
+            // Update existing case
+            const response = await fetch(`/api/emergency-cases/${existingCase._id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updateData)
+            })
+            
+            if (response.ok) {
+              console.log('✅ Emergency case updated in MongoDB with alert status')
+            }
+          } else {
+            // Create new case
+            const response = await fetch('/api/emergency-cases', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updateData)
+            })
+            
+            if (response.ok) {
+              console.log('✅ Emergency case created in MongoDB with alert sent')
+            }
+          }
+        } catch (mongoError) {
+          console.warn('⚠️ Could not update MongoDB:', mongoError.message)
+        }
+
         addNotification(`✓ Emergency alert sent to ${assignedHospital.name}`, 'success')
         pushAction(`✓ Alert sent to ${assignedHospital.name} • ${selectedEmergency.patientName} • ${selectedEmergency.incident}`)
       }, 1000)

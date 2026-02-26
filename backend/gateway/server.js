@@ -10,6 +10,7 @@ import { Room } from './models/Room.js'
 import { Doctor } from './models/Doctor.js'
 import { Patient } from './models/Patient.js'
 import { Discharge } from './models/Discharge.js'
+import { EmergencyCase } from './models/EmergencyCase.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -325,6 +326,64 @@ app.post('/api/seed', async (req, res) => {
   }
 })
 
+// ===== EMERGENCY CASES API =====
+app.get('/api/emergency-cases', async (req, res) => {
+  try {
+    const cases = await EmergencyCase.find()
+    res.json(cases)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post('/api/emergency-cases', async (req, res) => {
+  try {
+    console.log('📤 Creating emergency case:', req.body)
+    const emergencyCase = await EmergencyCase.create(req.body)
+    console.log('✅ Emergency case created:', emergencyCase)
+    res.status(201).json(emergencyCase)
+  } catch (error) {
+    console.error('❌ Emergency case creation error:', error.message)
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.get('/api/emergency-cases/:id', async (req, res) => {
+  try {
+    const emergencyCase = await EmergencyCase.findById(req.params.id)
+    if (!emergencyCase) {
+      return res.status(404).json({ error: 'Emergency case not found' })
+    }
+    res.json(emergencyCase)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.put('/api/emergency-cases/:id', async (req, res) => {
+  try {
+    console.log(`📝 Updating emergency case ${req.params.id} with:`, req.body)
+    const emergencyCase = await EmergencyCase.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    if (!emergencyCase) {
+      return res.status(404).json({ error: 'Emergency case not found' })
+    }
+    console.log(`✅ Emergency case updated:`, emergencyCase)
+    res.json(emergencyCase)
+  } catch (error) {
+    console.error(`❌ Emergency case update error:`, error.message)
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.delete('/api/emergency-cases/:id', async (req, res) => {
+  try {
+    await EmergencyCase.findByIdAndDelete(req.params.id)
+    res.json({ message: 'Emergency case deleted' })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
 // SPA fallback: serve index.html for all non-API routes (for React Router)
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
@@ -343,6 +402,9 @@ app.listen(PORT, () => {
   console.log(`   POST /api/doctors             - Create doctor`)
   console.log(`   GET  /api/patients            - Get all patients`)
   console.log(`   POST /api/patients            - Create patient`)
+  console.log(`   GET  /api/emergency-cases     - Get all emergency cases`)
+  console.log(`   POST /api/emergency-cases     - Create emergency case`)
+  console.log(`   PUT  /api/emergency-cases/:id - Update emergency case`)
   console.log(`   POST /api/optimize            - Run QAOA optimization`)
   console.log(`   POST /api/seed                - Initialize database\n`)
 })
