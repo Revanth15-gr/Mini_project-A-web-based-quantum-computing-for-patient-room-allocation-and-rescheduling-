@@ -11,7 +11,6 @@ function Doctors() {
     specialty: 'Cardiology',
     hospital: selectedHospital,
     district: 'Coastal Andhra',
-    status: 'On Duty',
     salary: '900000',
   })
 
@@ -41,12 +40,16 @@ function Doctors() {
       return
     }
 
+    // Randomly assign initial status
+    const statuses = ['On Duty', 'On Call', 'Off Shift']
+    const randomStatus = statuses[Math.floor(Math.random() * statuses.length)]
+
     const newDoctor = {
       name: formData.name.trim(),
       specialty: formData.specialty,
       hospital: formData.hospital,
       district: formData.district,
-      status: formData.status,
+      status: randomStatus,
       salary: parseInt(formData.salary),
     }
 
@@ -56,11 +59,10 @@ function Doctors() {
       specialty: 'Cardiology',
       hospital: selectedHospital,
       district: 'Coastal Andhra',
-      status: 'On Duty',
       salary: '900000',
     })
     setShowForm(false)
-    pushAction(`Added Dr. ${newDoctor.name} • ${newDoctor.specialty}`)
+    pushAction(`Added Dr. ${newDoctor.name} • ${newDoctor.specialty} • Status: ${randomStatus}`)
   }
 
   return (
@@ -161,14 +163,6 @@ function Doctors() {
                 <select name="district" value={formData.district} onChange={handleFormChange}>
                   <option>Coastal Andhra</option>
                   <option>Rayalaseema</option>
-                </select>
-              </label>
-              <label>
-                Status
-                <select name="status" value={formData.status} onChange={handleFormChange}>
-                  <option>On Duty</option>
-                  <option>On Call</option>
-                  <option>Off Shift</option>
                 </select>
               </label>
               <label>
