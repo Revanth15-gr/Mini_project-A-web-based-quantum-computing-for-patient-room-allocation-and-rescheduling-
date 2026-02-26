@@ -78,24 +78,88 @@ const quickActions = [
   'Dismiss Alert',
 ]
 
+// 5 Ambulances with different locations
+const ambulanceFleet = [
+  {
+    id: 'AMB-001',
+    location: { lat: 17.6869, lng: 83.2185, district: 'Coastal Andhra' },
+    status: 'En Route',
+    condition: 'Stable',
+  },
+  {
+    id: 'AMB-002',
+    location: { lat: 16.5062, lng: 80.6480, district: 'Coastal Andhra' },
+    status: 'Available',
+    condition: 'Idle',
+  },
+  {
+    id: 'AMB-003',
+    location: { lat: 15.8243, lng: 78.6783, district: 'Rayalaseema' },
+    status: 'En Route',
+    condition: 'Critical',
+  },
+  {
+    id: 'AMB-004',
+    location: { lat: 14.4426, lng: 79.9864, district: 'Rayalaseema' },
+    status: 'Available',
+    condition: 'Idle',
+  },
+  {
+    id: 'AMB-005',
+    location: { lat: 13.1939, lng: 79.8965, district: 'Rayalaseema' },
+    status: 'En Route',
+    condition: 'Severe',
+  },
+]
+
+// 3 Emergency Cases
+const emergencyCases = [
+  {
+    caseId: '#E001',
+    incident: 'Severe Car Accident',
+    location: 'RTC Complex & MVP Colony, Vizag',
+    ambulanceId: 'AMB-001',
+    eta: '4 Min',
+    severity: 'Critical',
+    patientName: 'Ramesh Kumar',
+    age: 45,
+    injuries: 'Multiple fractures, head trauma'
+  },
+  {
+    caseId: '#E002',
+    incident: 'Heart Attack Emergency',
+    location: 'Dwarakanagar, Vijayawada',
+    ambulanceId: 'AMB-003',
+    eta: '6 Min',
+    severity: 'Critical',
+    patientName: 'Lakshmi Devi',
+    age: 62,
+    injuries: 'Acute chest pain, difficulty breathing'
+  },
+  {
+    caseId: '#E003',
+    incident: 'Road Traffic Accident',
+    location: 'Tirupati Bypass Road, Tirupati',
+    ambulanceId: 'AMB-005',
+    eta: '8 Min',
+    severity: 'Severe',
+    patientName: 'Arjun Reddy',
+    age: 28,
+    injuries: 'Spinal injury, internal bleeding suspected'
+  },
+]
+
 function Emergency() {
   const mapRef = useRef(null)
   const googleMapRef = useRef(null)
   const [selectedHospital, setSelectedHospital] = useState(null)
   const [selectedDistrict, setSelectedDistrict] = useState('All Districts')
-  const [ambulanceLocation, setAmbulanceLocation] = useState({ lat: 15.8243, lng: 78.6783, district: 'Rayalaseema' })
+  const [selectedAmbulance, setSelectedAmbulance] = useState(ambulanceFleet[0])
+  const [selectedEmergency, setSelectedEmergency] = useState(emergencyCases[0])
   const [isAssigningHospital, setIsAssigningHospital] = useState(false)
   const [assignedHospital, setAssignedHospital] = useState(null)
   const [showERDialog, setShowERDialog] = useState(false)
   const [showPatientDialog, setShowPatientDialog] = useState(false)
-  const [emergencyCase, setEmergencyCase] = useState({
-    caseId: '#108',
-    incident: 'Severe Car Accident',
-    location: 'RTC Complex & MVP Colony',
-    ambulanceId: 'AMB-5241',
-    eta: '4 Min',
-    severity: 'Critical'
-  })
 
   const { addNotification } = useContext(HospitalContext)
 
@@ -130,10 +194,10 @@ function Emergency() {
 
     try {
       // Get hospitals in ambulance district or all if needed
-      const relevantHospitals = ambulanceLocation.district === 'All'
+      const relevantHospitals = selectedAmbulance.location.district === 'All'
         ? Object.entries(hospitalLocations)
         : Object.entries(hospitalLocations).filter(([_, coords]) => 
-            coords.district === ambulanceLocation.district
+            coords.district === selectedAmbulance.location.district
           )
 
       // Calculate distances and create optimization data
@@ -141,7 +205,7 @@ function Emergency() {
         name,
         coords,
         distance: calculateDistance(
-          ambulanceLocation.lat, ambulanceLocation.lng,
+          selectedAmbulance.location.lat, selectedAmbulance.location.lng,
           coords.lat, coords.lng
         ),
         beds: coords.beds,
@@ -152,8 +216,8 @@ function Emergency() {
       const topHospitals = hospitalsWithDistance.slice(0, Math.min(5, hospitalsWithDistance.length))
       
       const patients = [{
-        id: emergencyCase.caseId,
-        priority: emergencyCase.severity === 'Critical' ? 1.5 : 1.0
+        id: selectedEmergency.caseId,
+        priority: selectedEmergency.severity === 'Critical' ? 1.5 : 1.0
       }]
 
       const rooms = topHospitals.map(h => h.name)
@@ -192,7 +256,7 @@ function Emergency() {
           name,
           coords,
           distance: calculateDistance(
-            ambulanceLocation.lat, ambulanceLocation.lng,
+            selectedAmbulance.location.lat, selectedAmbulance.location.lng,
             coords.lat, coords.lng
           )
         }))
@@ -297,7 +361,7 @@ function Emergency() {
       }).addTo(map)
       
       const distance = calculateDistance(
-        ambulanceLocation.lat, ambulanceLocation.lng,
+        selectedAmbulance.location.lat, selectedAmbulance.location.lng,
         coords.lat, coords.lng
       )
       
@@ -325,49 +389,65 @@ function Emergency() {
       })
     })
     
-    // Add ambulance marker
-    const ambulanceIcon = L.divIcon({
-      html: `
-        <div style="
-          background: #fbbf24;
-          border: 3px solid #f59e0b;
-          border-radius: 50%;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-          font-size: 18px;
-          animation: pulse 2s infinite;
-        ">🚑</div>
-      `,
-      iconSize: [32, 32],
-      className: 'ambulance-icon',
-    })
-    
-    const ambulanceMarker = L.marker([ambulanceLocation.lat, ambulanceLocation.lng], {
-      icon: ambulanceIcon,
-    }).addTo(map)
-    
-    ambulanceMarker.bindPopup(`
-      <div style="font-family: Arial; font-size: 12px; min-width: 200px;">
-        <h4 style="margin: 0 0 8px 0; color: #0f2241; font-size: 14px;">🚑 Emergency Ambulance</h4>
-        <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-          <p style="margin: 4px 0; color: #555;"><strong>Case:</strong> ${emergencyCase.caseId}</p>
-          <p style="margin: 4px 0; color: #555;"><strong>Incident:</strong> ${emergencyCase.incident}</p>
-          <p style="margin: 4px 0; color: #555;"><strong>Location:</strong> ${emergencyCase.location}</p>
-          <p style="margin: 4px 0; color: #555;"><strong>ETA:</strong> ${emergencyCase.eta}</p>
-          <p style="margin: 4px 0; color: #f59e0b;"><strong>Status:</strong> In Transit</p>
+    // Add all ambulance markers (5 ambulances)
+    ambulanceFleet.forEach((ambulance) => {
+      const isSelected = selectedAmbulance.id === ambulance.id
+      const ambulanceIcon = L.divIcon({
+        html: `
+          <div style="
+            background: ${isSelected ? '#f59e0b' : '#fbbf24'};
+            border: ${isSelected ? '4px' : '3px'} solid #f59e0b;
+            border-radius: 50%;
+            width: ${isSelected ? 38 : 32}px;
+            height: ${isSelected ? 38 : 32}px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+            font-size: 18px;
+            animation: pulse 2s infinite;
+          ">🚑</div>
+        `,
+        iconSize: [isSelected ? 38 : 32, isSelected ? 38 : 32],
+        className: 'ambulance-icon',
+      })
+      
+      const marker = L.marker([ambulance.location.lat, ambulance.location.lng], {
+        icon: ambulanceIcon,
+      }).addTo(map)
+      
+      // Find corresponding emergency case for this ambulance
+      const emergencyForAmbulance = emergencyCases.find(e => e.ambulanceId === ambulance.id)
+      const emergencyContent = emergencyForAmbulance 
+        ? `<p style="margin: 4px 0; color: #555;"><strong>Case:</strong> ${emergencyForAmbulance.caseId}</p>
+           <p style="margin: 4px 0; color: #555;"><strong>Patient:</strong> ${emergencyForAmbulance.patientName}</p>
+           <p style="margin: 4px 0; color: #555;"><strong>Incident:</strong> ${emergencyForAmbulance.incident}</p>
+           <p style="margin: 4px 0; color: #555;"><strong>ETA:</strong> ${emergencyForAmbulance.eta}</p>`
+        : ''
+      
+      marker.bindPopup(`
+        <div style="font-family: Arial; font-size: 12px; min-width: 220px;">
+          <h4 style="margin: 0 0 8px 0; color: #0f2241; font-size: 14px;"> 🚑 ${ambulance.id}</h4>
+          <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+            <p style="margin: 4px 0; color: #555;"><strong>Status:</strong> ${ambulance.status}</p>
+            ${emergencyContent}
+            <p style="margin: 4px 0; color: #f59e0b;"><strong>Condition:</strong> ${ambulance.condition}</p>
+          </div>
         </div>
-      </div>
-    `, {
-      maxWidth: 280,
-      className: 'ambulance-popup'
-    })
-    
-    ambulanceMarker.on('click', () => {
-      pushAction(`Emergency ambulance case ${emergencyCase.caseId} - ${emergencyCase.incident}`)
+      `, {
+        maxWidth: 280,
+        className: 'ambulance-popup'
+      })
+      
+      marker.on('click', () => {
+        setSelectedAmbulance(ambulance)
+        if (emergencyForAmbulance) {
+          setSelectedEmergency(emergencyForAmbulance)
+          pushAction(`${ambulance.id} - ${emergencyForAmbulance.incident} - ETA: ${emergencyForAmbulance.eta}`)
+        } else {
+          pushAction(`${ambulance.id} - ${ambulance.status}`)
+        }
+      })
     })
     
     // Add custom CSS for animations
@@ -391,10 +471,13 @@ function Emergency() {
       const bounds = L.latLngBounds(
         filteredHospitals.map(([_, coords]) => [coords.lat, coords.lng])
       )
-      bounds.extend([ambulanceLocation.lat, ambulanceLocation.lng])
+      // Include all ambulances in bounds
+      ambulanceFleet.forEach(ambulance => {
+        bounds.extend([ambulance.location.lat, ambulance.location.lng])
+      })
       map.fitBounds(bounds, { padding: [50, 50] })
     }
-  }, [selectedDistrict, assignedHospital, filteredHospitals, ambulanceLocation, emergencyCase])
+  }, [selectedDistrict, assignedHospital, filteredHospitals, selectedAmbulance, selectedEmergency])
 
   return (
     <div className="emergency-page">
@@ -434,11 +517,13 @@ function Emergency() {
           <span className="alert-badge">Emergency Alert</span>
           <h3>Ambulance Reported Case: Nearby Hospitals Alert</h3>
           <div className="alert-meta">
-            <span>Case {emergencyCase.caseId}</span>
-            <span>{emergencyCase.incident}</span>
-            <span>{emergencyCase.location}</span>
-            <span>Ambulance ID: {emergencyCase.ambulanceId}</span>
-            <span>Arriving in {emergencyCase.eta}</span>
+            <span>Case {selectedEmergency.caseId}</span>
+            <span>Patient: {selectedEmergency.patientName}</span>
+            <span>{selectedEmergency.incident}</span>
+            <span>{selectedEmergency.location}</span>
+            <span>Ambulance ID: {selectedEmergency.ambulanceId}</span>
+            <span>Arriving in {selectedEmergency.eta}</span>
+            <span style={{ color: '#d97706', fontWeight: 'bold' }}>Severity: {selectedEmergency.severity}</span>
             {assignedHospital && (
               <span style={{ color: '#10b981', fontWeight: 'bold' }}>
                 ✓ Assigned: {assignedHospital.name}
@@ -501,7 +586,7 @@ function Emergency() {
             {filteredHospitals
               .map(([name, coords]) => {
                 const distance = calculateDistance(
-                  ambulanceLocation.lat, ambulanceLocation.lng,
+                  selectedAmbulance.location.lat, selectedAmbulance.location.lng,
                   coords.lat, coords.lng
                 )
                 return { name, coords, distance }
@@ -538,15 +623,115 @@ function Emergency() {
           <section className="panel">
             <div className="panel-header">
               <div>
-                <h3>Incoming Emergency Case</h3>
-                <p className="panel-subtitle">Case #108</p>
+                <h3>Active Emergency Cases (3)</h3>
+                <p className="panel-subtitle">Click to select an emergency</p>
               </div>
-              <span className="alert-chip">Arriving • 4 Min</span>
+            </div>
+            <div className="status-table">
+              {emergencyCases.map((emergency) => (
+                <div 
+                  key={emergency.caseId}
+                  className="status-row"
+                  onClick={() => {
+                    setSelectedEmergency(emergency)
+                    const ambulance = ambulanceFleet.find(a => a.id === emergency.ambulanceId)
+                    if (ambulance) setSelectedAmbulance(ambulance)
+                    pushAction(`Selected ${emergency.caseId} - ${emergency.patientName}`)
+                  }}
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: selectedEmergency?.caseId === emergency.caseId ? '#fef3c7' : 'transparent',
+                    padding: '0.75rem',
+                    borderRadius: '4px',
+                    marginBottom: '0.5rem',
+                    border: selectedEmergency?.caseId === emergency.caseId ? '2px solid #f59e0b' : '1px solid #e5e7eb'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <div>
+                      <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                        🚑 {emergency.caseId} - {emergency.ambulanceId}
+                      </p>
+                      <p style={{ margin: '0 0 2px 0', fontSize: '0.8rem', color: '#656565' }}>
+                        Patient: {emergency.patientName} ({emergency.age}y)
+                      </p>
+                      <p style={{ margin: '0 0 2px 0', fontSize: '0.8rem', color: '#656565' }}>
+                        {emergency.incident}
+                      </p>
+                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#d97706' }}>
+                        Severity: {emergency.severity} | ETA: {emergency.eta}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h3>Ambulance Fleet (5)</h3>
+                <p className="panel-subtitle">Real-time locations</p>
+              </div>
+            </div>
+            <div className="status-table">
+              {ambulanceFleet.map((ambulance) => (
+                <div 
+                  key={ambulance.id}
+                  className="status-row"
+                  onClick={() => {
+                    setSelectedAmbulance(ambulance)
+                    pushAction(`Selected ${ambulance.id} - ${ambulance.status}`)
+                  }}
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: selectedAmbulance?.id === ambulance.id ? '#fvef3c7' : 'transparent',
+                    padding: '0.75rem',
+                    borderRadius: '4px',
+                    marginBottom: '0.5rem',
+                    border: selectedAmbulance?.id === ambulance.id ? '2px solid #f59e0b' : '1px solid #e5e7eb'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <div>
+                      <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                        🚑 {ambulance.id}
+                      </p>
+                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#656565' }}>
+                        Status: {ambulance.status} | Condition: {ambulance.condition}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h3>Selected Case Details</h3>
+                <p className="panel-subtitle">{selectedEmergency.caseId}</p>
+              </div>
+              <span className="alert-chip">{selectedEmergency.severity}</span>
             </div>
             <div className="incoming-card">
-              <p>Severe Car Accident</p>
-              <p>RTC Complex & MVP Colony</p>
-              <div className="incoming-photo" />
+              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                <strong>Patient:</strong> {selectedEmergency.patientName}, {selectedEmergency.age} years
+              </p>
+              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                <strong>Incident:</strong> {selectedEmergency.incident}
+              </p>
+              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                <strong>Location:</strong> {selectedEmergency.location}
+              </p>
+              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                <strong>Injuries:</strong> {selectedEmergency.injuries}
+              </p>
+              <p style={{ fontSize: '0.9rem', margin: '8px 0' }}>
+                <strong>Ambulance:</strong> {selectedEmergency.ambulanceId} (ETA: {selectedEmergency.eta})
+              </p>
               <div className="incoming-actions">
                 <button
                   className="ghost-button"
