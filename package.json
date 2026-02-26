@@ -6,14 +6,16 @@
   "scripts": {
     "dev": "vite",
     "dev:gateway": "node backend/gateway/server.js",
-    "dev:qaoa": "python -m uvicorn main:app --reload --app-dir backend/qaoa-service",
+    "dev:qaoa": "py -m uvicorn main:app --reload --app-dir backend/qaoa-service",
     "dev:all": "concurrently -k -n WEB,GATEWAY,QAOA -c cyan,magenta,green \"npm run dev\" \"npm run dev:gateway\" \"npm run dev:qaoa\"",
     "build": "npm --prefix backend/gateway install && npx vite build",
-    "postinstall": "npm --prefix backend/gateway install && python -m pip install -r backend/qaoa-service/requirements.txt",
+    "postinstall": "npm --prefix backend/gateway install && py -m pip install -r backend/qaoa-service/requirements.txt",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "leaflet-defaulticon-compatibility": "^0.1.2",
     "react": "^19.2.0",

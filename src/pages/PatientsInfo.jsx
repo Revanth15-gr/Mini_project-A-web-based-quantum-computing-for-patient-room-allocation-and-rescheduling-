@@ -10,11 +10,15 @@ function PatientsInfo() {
   const [isRescheduling, setIsRescheduling] = useState(false)
   const [reschedulingResult, setReschedulingResult] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showRescheduleDialog, setShowRescheduleDialog] = useState(false)
+  const [selectedPatients, setSelectedPatients] = useState([])
+  const [isApplyingSchedule, setIsApplyingSchedule] = useState(false)
   const {
     rooms,
     patients,
     addPatient,
     removePatient,
+    updatePatient,
     hospitals,
     selectedHospital,
     setSelectedHospital,
@@ -91,18 +95,33 @@ function PatientsInfo() {
   }
 
   const handleRescheduling = async () => {
+    if (selectedPatients.length === 0) {
+      pushAction('Please select at least one patient to reschedule')
+      addNotification('Please select at least one patient to reschedule', 'error')
+      return
+    }
+
     setIsRescheduling(true)
     setReschedulingResult(null)
+    setShowRescheduleDialog(false)
     pushAction('Starting quantum optimization rescheduling...')
     addNotification('Running QAOA optimization for patient rescheduling...', 'info')
 
     try {
-      // Get patients for the selected hospital
-      const hospitalPatients = patients.filter((p) => p.hospital === selectedHospital)
+      // Get only selected patients
+      const hospitalPatients = patients.filter((p) => 
+        p.hospital === selectedHospital && selectedPatients.includes(p._id || p.name)
+      )
       const hospitalRooms = rooms.filter((r) => r.hospital === selectedHospital)
 
       if (hospitalPatients.length === 0) {
-        addNotification(`No patients found in ${selectedHospital}`, 'error')
+        addNotification(`No patients selected in ${selectedHospital}`, 'error')
+        setIsRescheduling(false)
+        return
+      }
+
+      if (hospitalRooms.length === 0) {
+        addNotification(`No rooms available in ${selectedHospital}`, 'error')
         setIsRescheduling(false)
         return
       }
@@ -122,7 +141,11 @@ function PatientsInfo() {
         )
       }
 
-      console.log('QAOA Rescheduling Request:', { patients: patientsForQaoa, rooms: roomsForQaoa })
+      console.log('QAOA Rescheduling Request:', { 
+        patients: patientsForQaoa, 
+        rooms: roomsForQaoa,
+        hospital: selectedHospital
+      })
 
       const response = await fetch('/api/optimize', {
         method: 'POST',
@@ -133,6 +156,8 @@ function PatientsInfo() {
         }),
       })
 
+      console.log('Response status:', response.status)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         console.error('QAOA Rescheduling Error:', errorData)
@@ -141,10 +166,15 @@ function PatientsInfo() {
 
       const result = await response.json()
       console.log('QAOA Rescheduling Result:', result)
+      
+      if (!result.assignments || result.assignments.length === 0) {
+        throw new Error('No assignments returned from optimization')
+      }
+
       setReschedulingResult(result)
       addNotification('QAOA rescheduling completed successfully', 'success')
       pushAction(
-        `Rescheduling complete: ${hospitalPatients.length} patients optimized`
+        `Rescheduling complete: ${result.assignments.length} patients optimized with cost ${result.cost?.toFixed(2) || 'N/A'}`
       )
     } catch (error) {
       console.error('Rescheduling error:', error)
@@ -152,6 +182,113 @@ function PatientsInfo() {
       pushAction(`Rescheduling error: ${error.message}`)
     } finally {
       setIsRescheduling(false)
+    }
+  }
+
+  const handleOpenRescheduleDialog = () => {
+    const hospitalPatients = patients.filter((p) => p.hospital === selectedHospital)
+    
+    if (hospitalPatients.length === 0) {
+      pushAction('No patients available to reschedule')
+      addNotification('No patients available to reschedule', 'error')
+      return
+    }
+    
+    // Pre-select all patients
+    setSelectedPatients(hospitalPatients.map(p => p._id || p.name))
+    
+    // Open dialog
+    setShowRescheduleDialog(true)
+    console.log('Opening reschedule dialog for', hospitalPatients.length, 'patients')
+  }
+
+  const handlePatientToggle = (patientId) => {
+    setSelectedPatients(prev => 
+      prev.includes(patientId) 
+        ? prev.filter(id => id !== patientId)
+        : [...prev, patientId]
+    )
+  }
+
+  const handleSelectAll = () => {
+    const hospitalPatients = patients.filter((p) => p.hospital === selectedHospital)
+    setSelectedPatients(hospitalPatients.map(p => p._id || p.name))
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedPatients([])
+  }
+
+  const handleApplyOptimizedSchedule = async () => {
+    if (!reschedulingResult || !reschedulingResult.assignments) {
+      addNotification('No optimization results to apply', 'error')
+      return
+    }
+
+    setIsApplyingSchedule(true)
+    console.log('Applying optimized schedule:', reschedulingResult.assignments)
+    pushAction('Applying optimized room assignments...')
+    addNotification('Applying optimized room assignments...', 'info')
+
+    try {
+      let successCount = 0
+      let errorCount = 0
+
+      // Update each patient with their new room assignment
+      for (const assignment of reschedulingResult.assignments) {
+        try {
+          // Find the patient by name
+          const patient = patients.find(p => p.name === assignment.patient)
+          
+          if (!patient) {
+            console.warn(`Patient not found: ${assignment.patient}`)
+            errorCount++
+            continue
+          }
+
+          if (!assignment.room) {
+            console.warn(`No room assigned for: ${assignment.patient}`)
+            errorCount++
+            continue
+          }
+
+          // Update patient room assignment
+          console.log(`Updating ${patient.name} from ${patient.room} to ${assignment.room}`)
+          
+          await updatePatient(patient._id, {
+            ...patient,
+            room: assignment.room
+          })
+
+          successCount++
+        } catch (error) {
+          console.error(`Error updating patient ${assignment.patient}:`, error)
+          errorCount++
+        }
+      }
+
+      if (errorCount === 0) {
+        addNotification(`✓ Successfully applied optimized schedule to ${successCount} patients`, 'success')
+        pushAction(`Applied optimized schedule to ${successCount} patients`)
+      } else {
+        addNotification(
+          `Applied schedule: ${successCount} successful, ${errorCount} failed`,
+          'warning'
+        )
+        pushAction(`Applied schedule: ${successCount} successful, ${errorCount} failed`)
+      }
+
+      // Clear the results after applying
+      setTimeout(() => {
+        setReschedulingResult(null)
+      }, 3000)
+
+    } catch (error) {
+      console.error('Error applying optimized schedule:', error)
+      addNotification(`Failed to apply schedule: ${error.message}`, 'error')
+      pushAction(`Error applying schedule: ${error.message}`)
+    } finally {
+      setIsApplyingSchedule(false)
     }
   }
 
@@ -278,8 +415,14 @@ function PatientsInfo() {
                 type="button"
                 onClick={async (event) => {
                   event.stopPropagation()
-                  await removePatient(patient)
-                  pushAction(`Discharged ${patient.name} • Room freed`)
+                  const reason = prompt(
+                    `Enter discharge reason for ${patient.name}:`,
+                    'Treatment completed successfully'
+                  )
+                  if (reason !== null) {
+                    await removePatient(patient, reason || 'Discharged')
+                    pushAction(`Discharged ${patient.name} • Room freed • Reason: ${reason || 'Discharged'}`)
+                  }
                 }}
               >
                 Discharge
@@ -297,14 +440,25 @@ function PatientsInfo() {
               Optimize patient assignments for {selectedHospital}
             </p>
           </div>
-          <button
-            className="outline-button"
-            type="button"
-            onClick={handleRescheduling}
-            disabled={isRescheduling || patients.filter((p) => p.hospital === selectedHospital).length === 0}
-          >
-            {isRescheduling ? 'Optimizing...' : 'Run Optimization'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {reschedulingResult && (
+              <button
+                className="outline-button"
+                type="button"
+                onClick={() => setReschedulingResult(null)}
+              >
+                Clear Results
+              </button>
+            )}
+            <button
+              className="outline-button"
+              type="button"
+              onClick={handleOpenRescheduleDialog}
+              disabled={isRescheduling || patients.filter((p) => p.hospital === selectedHospital).length === 0}
+            >
+              {isRescheduling ? 'Optimizing...' : 'Run Optimization'}
+            </button>
+          </div>
         </div>
         {isRescheduling ? (
           <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -338,22 +492,38 @@ function PatientsInfo() {
               <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.95 }}>
                 {reschedulingResult.message || 'Patient assignments optimized successfully'}
               </p>
+              {reschedulingResult.cost !== undefined && (
+                <p style={{ fontSize: '0.85rem', marginTop: '0.25rem', opacity: 0.9 }}>
+                  Optimization Cost: {reschedulingResult.cost.toFixed(3)}
+                </p>
+              )}
             </div>
-            {reschedulingResult.assignments && (
+            {reschedulingResult.assignments && reschedulingResult.assignments.length > 0 && (
               <div>
                 <h4 style={{ marginBottom: '0.75rem', fontSize: '0.95rem' }}>
-                  Optimized Assignments:
+                  Optimized Assignments ({reschedulingResult.assignments.length} patients):
                 </h4>
                 <div className="queue-list">
-                  {Object.entries(reschedulingResult.assignments).slice(0, 5).map(([patient, room]) => (
-                    <div key={patient} className="queue-item">
+                  {reschedulingResult.assignments.slice(0, 8).map((assignment, idx) => (
+                    <div key={idx} className="queue-item">
                       <div className="queue-pulse" aria-hidden="true" />
                       <div>
-                        <p className="queue-title">{patient}</p>
-                        <p className="queue-meta">Assigned to {room}</p>
+                        <p className="queue-title">{assignment.patient}</p>
+                        <p className="queue-meta">Assigned to {assignment.room || 'No room available'}</p>
                       </div>
                     </div>
                   ))}
+                </div>
+                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={handleApplyOptimizedSchedule}
+                    disabled={isApplyingSchedule}
+                    style={{ minWidth: '200px' }}
+                  >
+                    {isApplyingSchedule ? 'Applying Schedule...' : 'Apply Optimized Schedule'}
+                  </button>
                 </div>
               </div>
             )}
@@ -377,6 +547,132 @@ function PatientsInfo() {
           </div>
         )}
       </section>
+
+      {/* Reschedule Dialog */}
+      {showRescheduleDialog && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setShowRescheduleDialog(false)}
+        >
+          <div 
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '600px',
+              width: '90%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#0f2241' }}>
+                Select Patients for Rescheduling
+              </h3>
+              <p style={{ margin: '0.5rem 0 0 0', color: '#666', fontSize: '0.9rem' }}>
+                Choose patients from {selectedHospital} to optimize with QAOA
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={handleSelectAll}
+                style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+              >
+                Select All
+              </button>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={handleDeselectAll}
+                style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+              >
+                Deselect All
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
+              {patients.filter((p) => p.hospital === selectedHospital).length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#666', padding: '2rem' }}>
+                  No patients available in {selectedHospital}
+                </p>
+              ) : (
+                patients.filter((p) => p.hospital === selectedHospital).map((patient) => (
+                  <label 
+                    key={patient._id || patient.name}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #e0e0e0',
+                      marginBottom: '0.5rem',
+                      cursor: 'pointer',
+                      backgroundColor: selectedPatients.includes(patient._id || patient.name) ? '#f0f8ff' : '#fff',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedPatients.includes(patient._id || patient.name)}
+                      onChange={() => handlePatientToggle(patient._id || patient.name)}
+                      style={{ marginRight: '0.75rem', width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', color: '#0f2241' }}>
+                        {patient.name}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.25rem' }}>
+                        Room: {patient.room} • {patient.status} • {patient.care}
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              gap: '0.75rem', 
+              justifyContent: 'flex-end',
+              borderTop: '1px solid #e0e0e0',
+              paddingTop: '1.5rem'
+            }}>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={() => setShowRescheduleDialog(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={handleRescheduling}
+                disabled={selectedPatients.length === 0}
+              >
+                Optimize {selectedPatients.length} Patient{selectedPatients.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

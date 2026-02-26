@@ -208,7 +208,13 @@ app.post('/api/patients', async (req, res) => {
 
 app.put('/api/patients/:id', async (req, res) => {
   try {
+    if (!dbConnected) {
+      return res.status(503).json({ error: 'Database not connected' })
+    }
     const patient = await Patient.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient not found' })
+    }
     res.json(patient)
   } catch (error) {
     res.status(400).json({ error: error.message })

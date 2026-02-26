@@ -231,7 +231,7 @@ function HospitalProvider({ children }) {
     }
   }
 
-  const removePatient = async (patient) => {
+  const removePatient = async (patient, reason = 'Discharged') => {
     try {
       const response = await fetch('/api/discharges', {
         method: 'POST',
@@ -243,7 +243,7 @@ function HospitalProvider({ children }) {
           room: patient.room,
           hospital: patient.hospital,
           care: patient.care,
-          reason: 'Discharged',
+          reason: reason,
         }),
       })
 
@@ -317,6 +317,33 @@ function HospitalProvider({ children }) {
     }, 5000)
   }
 
+  const updatePatient = async (patientId, updates) => {
+    try {
+      const response = await fetch(`/api/patients/${patientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to update patient: ${response.statusText}`)
+      }
+
+      const updatedPatient = await response.json()
+      
+      // Update local state
+      setPatients((current) =>
+        current.map((p) => (p._id === patientId ? updatedPatient : p))
+      )
+
+      return updatedPatient
+    } catch (error) {
+      console.error('Error updating patient:', error)
+      addNotification(`Failed to update patient: ${error.message}`, 'error')
+      throw error
+    }
+  }
+
 
 
   const value = {
@@ -324,6 +351,7 @@ function HospitalProvider({ children }) {
     patients,
     addPatient,
     removePatient,
+    updatePatient,
     hospitals: hospitalNames,
     selectedHospital,
     setSelectedHospital,

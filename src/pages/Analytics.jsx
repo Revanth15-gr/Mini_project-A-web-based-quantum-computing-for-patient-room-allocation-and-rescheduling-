@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
+import { HospitalContext } from '../state/HospitalContext.jsx'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css'
@@ -81,9 +82,149 @@ function Emergency() {
   const mapRef = useRef(null)
   const googleMapRef = useRef(null)
   const [selectedHospital, setSelectedHospital] = useState(null)
+  const [selectedDistrict, setSelectedDistrict] = useState('All Districts')
+  const [ambulanceLocation, setAmbulanceLocation] = useState({ lat: 15.8243, lng: 78.6783, district: 'Rayalaseema' })
+  const [isAssigningHospital, setIsAssigningHospital] = useState(false)
+  const [assignedHospital, setAssignedHospital] = useState(null)
+  const [showERDialog, setShowERDialog] = useState(false)
+  const [showPatientDialog, setShowPatientDialog] = useState(false)
+  const [emergencyCase, setEmergencyCase] = useState({
+    caseId: '#108',
+    incident: 'Severe Car Accident',
+    location: 'RTC Complex & MVP Colony',
+    ambulanceId: 'AMB-5241',
+    eta: '4 Min',
+    severity: 'Critical'
+  })
+
+  const { addNotification } = useContext(HospitalContext)
 
   const pushAction = (message) => {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
+  }
+
+  const districts = ['All Districts', 'Coastal Andhra', 'Rayalaseema']
+
+  // Filter hospitals by selected district
+  const filteredHospitals = selectedDistrict === 'All Districts'
+    ? Object.entries(hospitalLocations)
+    : Object.entries(hospitalLocations).filter(([_, coords]) => coords.district === selectedDistrict)
+
+  // Calculate distance between two points (Haversine formula)
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371 // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+  }
+
+  // QAOA-based hospital assignment
+  const handleAssignHospitalQAOA = async () => {
+    setIsAssigningHospital(true)
+    pushAction('Running QAOA optimization to assign nearest hospital...')
+    addNotification('Assigning hospital using quantum optimization...', 'info')
+
+    try {
+      // Get hospitals in ambulance district or all if needed
+      const relevantHospitals = ambulanceLocation.district === 'All'
+        ? Object.entries(hospitalLocations)
+        : Object.entries(hospitalLocations).filter(([_, coords]) => 
+            coords.district === ambulanceLocation.district
+          )
+
+      // Calculate distances and create optimization data
+      const hospitalsWithDistance = relevantHospitals.map(([name, coords]) => ({
+        name,
+        coords,
+        distance: calculateDistance(
+          ambulanceLocation.lat, ambulanceLocation.lng,
+          coords.lat, coords.lng
+        ),
+        beds: coords.beds,
+        doctors: coords.doctors,
+      })).sort((a, b) => a.distance - b.distance)
+
+      // Prepare QAOA request for top 5 nearest hospitals
+      const topHospitals = hospitalsWithDistance.slice(0, Math.min(5, hospitalsWithDistance.length))
+      
+      const patients = [{
+        id: emergencyCase.caseId,
+        priority: emergencyCase.severity === 'Critical' ? 1.5 : 1.0
+      }]
+
+      const rooms = topHospitals.map(h => h.name)
+
+      console.log('QAOA Hospital Assignment Request:', { patients, rooms, topHospitals })
+
+      const response = await fetch('/api/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patients, rooms })
+      })
+
+      if (!response.ok) {
+        throw new Error('QAOA optimization failed')
+      }
+
+      const result = await response.json()
+      console.log('QAOA Assignment Result:', result)
+
+      const assignedHospitalName = result.assignments[0]?.room || topHospitals[0].name
+      const assignedData = hospitalsWithDistance.find(h => h.name === assignedHospitalName)
+
+      setAssignedHospital(assignedData)
+      setSelectedHospital(assignedHospitalName)
+      
+      addNotification(`✓ Hospital assigned: ${assignedHospitalName} (${assignedData.distance.toFixed(1)} km)`, 'success')
+      pushAction(`Assigned ${assignedHospitalName} - ${assignedData.distance.toFixed(1)}km away, ${assignedData.beds} beds, ${assignedData.doctors} doctors`)
+
+    } catch (error) {
+      console.error('Hospital assignment error:', error)
+      addNotification(`Assignment failed: ${error.message}`, 'error')
+      
+      // Fallback: assign nearest hospital
+      const nearest = Object.entries(hospitalLocations)
+        .map(([name, coords]) => ({
+          name,
+          coords,
+          distance: calculateDistance(
+            ambulanceLocation.lat, ambulanceLocation.lng,
+            coords.lat, coords.lng
+          )
+        }))
+        .sort((a, b) => a.distance - b.distance)[0]
+
+      setAssignedHospital(nearest)
+      setSelectedHospital(nearest.name)
+      addNotification(`Fallback: Assigned nearest hospital - ${nearest.name}`, 'warning')
+    } finally {
+      setIsAssigningHospital(false)
+    }
+  }
+
+  const handlePrepareERTeam = () => {
+    setShowERDialog(true)
+    pushAction('Preparing ER team...')
+    addNotification('ER Team notification sent', 'success')
+  }
+
+  const handleSharePatientInfo = () => {
+    setShowPatientDialog(true)
+    pushAction('Sharing patient information...')
+    addNotification('Patient info shared with assigned hospital', 'success')
+  }
+
+  const handleDismissAlert = () => {
+    if (confirm('Are you sure you want to dismiss this emergency alert?')) {
+      setAssignedHospital(null)
+      setSelectedHospital(null)
+      pushAction('Emergency alert dismissed')
+      addNotification('Emergency alert dismissed', 'info')
+    }
   }
 
   // Initialize Leaflet Map
@@ -103,44 +244,72 @@ function Emergency() {
     
     googleMapRef.current = map
     
+    return () => {
+      map.remove()
+      googleMapRef.current = null
+    }
+  }, [])
+
+  // Update map markers when district filter changes
+  useEffect(() => {
+    if (!googleMapRef.current) return
+    
+    const map = googleMapRef.current
+    
+    // Clear all markers
+    map.eachLayer((layer) => {
+      if (layer instanceof L.Marker) {
+        map.removeLayer(layer)
+      }
+    })
+    
     // Create custom icon for hospitals
-    const createHospitalIcon = (district) => {
-      const color = district === 'Coastal Andhra' ? '#ef4444' : '#3b82f6'
+    const createHospitalIcon = (district, isAssigned = false) => {
+      const color = isAssigned ? '#10b981' : (district === 'Coastal Andhra' ? '#ef4444' : '#3b82f6')
       return L.divIcon({
         html: `
           <div style="
             background: ${color};
             border: 3px solid white;
             border-radius: 50%;
-            width: 24px;
-            height: 24px;
+            width: ${isAssigned ? 32 : 24}px;
+            height: ${isAssigned ? 32 : 24}px;
             display: flex;
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             font-weight: bold;
             color: white;
-            font-size: 12px;
+            font-size: ${isAssigned ? 16 : 12}px;
+            ${isAssigned ? 'animation: pulse 2s infinite;' : ''}
           ">🏥</div>
         `,
-        iconSize: [24, 24],
+        iconSize: [isAssigned ? 32 : 24, isAssigned ? 32 : 24],
         className: 'hospital-icon',
       })
     }
     
-    // Add hospital markers
-    Object.entries(hospitalLocations).forEach(([name, coords]) => {
+    // Add hospital markers based on filter
+    filteredHospitals.forEach(([name, coords]) => {
+      const isAssigned = assignedHospital && assignedHospital.name === name
       const marker = L.marker([coords.lat, coords.lng], {
-        icon: createHospitalIcon(coords.district),
+        icon: createHospitalIcon(coords.district, isAssigned),
       }).addTo(map)
+      
+      const distance = calculateDistance(
+        ambulanceLocation.lat, ambulanceLocation.lng,
+        coords.lat, coords.lng
+      )
       
       const popupContent = `
         <div style="font-family: Arial; font-size: 12px; min-width: 180px;">
           <h4 style="margin: 0 0 8px 0; color: #0f2241; font-size: 14px;">${name}</h4>
+          ${isAssigned ? '<p style="margin: 4px 0; color: #10b981; font-weight: bold;">✓ Assigned Hospital</p>' : ''}
           <div style="border-top: 1px solid #ddd; padding-top: 8px;">
             <p style="margin: 4px 0; color: #555;"><strong>District:</strong> ${coords.district}</p>
             <p style="margin: 4px 0; color: #555;"><strong>Available Beds:</strong> ${coords.beds}</p>
             <p style="margin: 4px 0; color: #555;"><strong>ER Doctors:</strong> ${coords.doctors}</p>
+            <p style="margin: 4px 0; color: #555;"><strong>Distance:</strong> ${distance.toFixed(1)} km</p>
           </div>
         </div>
       `
@@ -177,7 +346,7 @@ function Emergency() {
       className: 'ambulance-icon',
     })
     
-    const ambulanceMarker = L.marker([15.8243, 78.6783], {
+    const ambulanceMarker = L.marker([ambulanceLocation.lat, ambulanceLocation.lng], {
       icon: ambulanceIcon,
     }).addTo(map)
     
@@ -185,10 +354,10 @@ function Emergency() {
       <div style="font-family: Arial; font-size: 12px; min-width: 200px;">
         <h4 style="margin: 0 0 8px 0; color: #0f2241; font-size: 14px;">🚑 Emergency Ambulance</h4>
         <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-          <p style="margin: 4px 0; color: #555;"><strong>Case:</strong> #108</p>
-          <p style="margin: 4px 0; color: #555;"><strong>Incident:</strong> Severe Car Accident</p>
-          <p style="margin: 4px 0; color: #555;"><strong>Location:</strong> RTC Complex & MVP Colony</p>
-          <p style="margin: 4px 0; color: #555;"><strong>ETA:</strong> 4 Minutes</p>
+          <p style="margin: 4px 0; color: #555;"><strong>Case:</strong> ${emergencyCase.caseId}</p>
+          <p style="margin: 4px 0; color: #555;"><strong>Incident:</strong> ${emergencyCase.incident}</p>
+          <p style="margin: 4px 0; color: #555;"><strong>Location:</strong> ${emergencyCase.location}</p>
+          <p style="margin: 4px 0; color: #555;"><strong>ETA:</strong> ${emergencyCase.eta}</p>
           <p style="margin: 4px 0; color: #f59e0b;"><strong>Status:</strong> In Transit</p>
         </div>
       </div>
@@ -198,7 +367,7 @@ function Emergency() {
     })
     
     ambulanceMarker.on('click', () => {
-      pushAction('Emergency ambulance case #108 - Severe car accident')
+      pushAction(`Emergency ambulance case ${emergencyCase.caseId} - ${emergencyCase.incident}`)
     })
     
     // Add custom CSS for animations
@@ -217,11 +386,15 @@ function Emergency() {
       document.head.appendChild(style)
     }
     
-    return () => {
-      map.remove()
-      googleMapRef.current = null
+    // Adjust map bounds to show all markers
+    if (filteredHospitals.length > 0) {
+      const bounds = L.latLngBounds(
+        filteredHospitals.map(([_, coords]) => [coords.lat, coords.lng])
+      )
+      bounds.extend([ambulanceLocation.lat, ambulanceLocation.lng])
+      map.fitBounds(bounds, { padding: [50, 50] })
     }
-  }, [])
+  }, [selectedDistrict, assignedHospital, filteredHospitals, ambulanceLocation, emergencyCase])
 
   return (
     <div className="emergency-page">
@@ -230,9 +403,29 @@ function Emergency() {
           <h2>Emergency Management</h2>
           <p className="panel-subtitle">Real-time hospital location mapping & response</p>
         </div>
-        <div className="emergency-search">
-          <span className="search-icon" aria-hidden="true" />
-          <input type="search" placeholder="Search hospitals..." aria-label="Search" />
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <select 
+            value={selectedDistrict}
+            onChange={(e) => {
+              setSelectedDistrict(e.target.value)
+              pushAction(`District filter: ${e.target.value}`)
+            }}
+            style={{
+              padding: '0.5rem 1rem',
+              borderRadius: '8px',
+              border: '1px solid #d1d5db',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            {districts.map(district => (
+              <option key={district} value={district}>{district}</option>
+            ))}
+          </select>
+          <div className="emergency-search">
+            <span className="search-icon" aria-hidden="true" />
+            <input type="search" placeholder="Search hospitals..." aria-label="Search" />
+          </div>
         </div>
       </div>
 
@@ -241,11 +434,16 @@ function Emergency() {
           <span className="alert-badge">Emergency Alert</span>
           <h3>Ambulance Reported Case: Nearby Hospitals Alert</h3>
           <div className="alert-meta">
-            <span>Case #108</span>
-            <span>Severe Car Accident</span>
-            <span>RTC Complex & MVP Colony</span>
-            <span>Ambulance ID: AMB-5241</span>
-            <span>Arriving in 4 Min</span>
+            <span>Case {emergencyCase.caseId}</span>
+            <span>{emergencyCase.incident}</span>
+            <span>{emergencyCase.location}</span>
+            <span>Ambulance ID: {emergencyCase.ambulanceId}</span>
+            <span>Arriving in {emergencyCase.eta}</span>
+            {assignedHospital && (
+              <span style={{ color: '#10b981', fontWeight: 'bold' }}>
+                ✓ Assigned: {assignedHospital.name}
+              </span>
+            )}
           </div>
         </div>
         <div className="alert-actions">
@@ -284,31 +482,50 @@ function Emergency() {
           <div className="panel-header">
             <div>
               <h3>Andhra Pradesh Hospital Network Map</h3>
-              <p className="panel-subtitle">20 hospitals across Coastal Andhra & Rayalaseema districts {selectedHospital && `- Selected: ${selectedHospital}`}</p>
+              <p className="panel-subtitle">
+                {filteredHospitals.length} hospitals in {selectedDistrict}
+                {selectedHospital && ` - Selected: ${selectedHospital}`}
+                {assignedHospital && ` - Assigned: ${assignedHospital.name} (${assignedHospital.distance.toFixed(1)} km)`}
+              </p>
             </div>
           </div>
           <div className="status-table">
             <div className="status-row status-head">
               <span>Hospital</span>
-              <span>Available</span>
-              <span>ER Doctors</span>
-              <span>ER Readiness</span>
+              <span>District</span>
+              <span>Beds</span>
+              <span>Doctors</span>
               <span>Distance</span>
               <span></span>
             </div>
-            {hospitalStatus.map((hospital) => (
-              <div key={hospital.name} className="status-row">
-                <span>{hospital.name}</span>
-                <span>{hospital.available}</span>
-                <span>{hospital.doctors}</span>
-                <span className={`status-pill ${hospital.statusTone}`}>
-                  {hospital.readiness}
+            {filteredHospitals
+              .map(([name, coords]) => {
+                const distance = calculateDistance(
+                  ambulanceLocation.lat, ambulanceLocation.lng,
+                  coords.lat, coords.lng
+                )
+                return { name, coords, distance }
+              })
+              .sort((a, b) => a.distance - b.distance)
+              .slice(0, 10)
+              .map(({ name, coords, distance }) => (
+              <div key={name} className="status-row" style={{
+                backgroundColor: assignedHospital?.name === name ? '#f0fdf4' : 'transparent'
+              }}>
+                <span style={{ fontWeight: assignedHospital?.name === name ? 'bold' : 'normal' }}>
+                  {assignedHospital?.name === name && '✓ '}{name}
                 </span>
-                <span>{hospital.distance}</span>
+                <span>{coords.district === 'Coastal Andhra' ? '🌊 Coastal' : '⛰️ Rayalaseema'}</span>
+                <span>{coords.beds} Beds</span>
+                <span>{coords.doctors} Doctors</span>
+                <span>{distance.toFixed(1)} km</span>
                 <button
                   className="ghost-button"
                   type="button"
-                  onClick={() => pushAction(`Viewing details for ${hospital.name}`)}
+                  onClick={() => {
+                    setSelectedHospital(name)
+                    pushAction(`Viewing details for ${name}`)
+                  }}
                 >
                   View Details
                 </button>
@@ -357,20 +574,151 @@ function Emergency() {
               </div>
             </div>
             <div className="quick-list">
-              {quickActions.map((action) => (
-                <button
-                  key={action}
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => pushAction(`${action} triggered`)}
-                >
-                  {action}
-                </button>
-              ))}
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={handlePrepareERTeam}
+              >
+                Prepare ER Team
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={handleSharePatientInfo}
+              >
+                Share Patient Info
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={handleAssignHospitalQAOA}
+                disabled={isAssigningHospital || assignedHospital !== null}
+                style={{ width: '100%' }}
+              >
+                {isAssigningHospital ? 'Assigning...' : assignedHospital ? '✓ Hospital Assigned' : 'Assign Hospital (QAOA)'}
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={handleDismissAlert}
+                style={{ color: '#dc2626' }}
+              >
+                Dismiss Alert
+              </button>
             </div>
           </section>
         </aside>
       </div>
+
+      {/* ER Team Dialog */}
+      {showERDialog && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setShowERDialog(false)}
+        >
+          <div 
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 1rem 0', color: '#0f2241' }}>ER Team Preparation</h3>
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f0fdf4', borderRadius: '8px' }}>
+              <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>✓ ER Team notified</p>
+              <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>✓ Trauma bay prepared</p>
+              <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>✓ Specialist on standby</p>
+              <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>✓ Operating room alerted</p>
+              {assignedHospital && (
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem', fontWeight: 'bold', color: '#10b981' }}>
+                  Hospital: {assignedHospital.name}
+                </p>
+              )}
+            </div>
+            <button
+              className="primary-button"
+              onClick={() => setShowERDialog(false)}
+              style={{ width: '100%' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Patient Info Dialog */}
+      {showPatientDialog && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setShowPatientDialog(false)}
+        >
+          <div 
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 1rem 0', color: '#0f2241' }}>Patient Information Shared</h3>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ padding: '1rem', background: '#f9fafb', borderRadius: '8px', marginBottom: '1rem' }}>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Case ID:</strong> {emergencyCase.caseId}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Incident:</strong> {emergencyCase.incident}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Severity:</strong> {emergencyCase.severity}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>ETA:</strong> {emergencyCase.eta}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Location:</strong> {emergencyCase.location}</p>
+              </div>
+              {assignedHospital && (
+                <div style={{ padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #10b981' }}>
+                  <p style={{ margin: '0.25rem 0', fontSize: '0.9rem', fontWeight: 'bold', color: '#10b981' }}>
+                    ✓ Shared with {assignedHospital.name}
+                  </p>
+                  <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#666' }}>
+                    Distance: {assignedHospital.distance.toFixed(1)} km
+                  </p>
+                </div>
+              )}
+            </div>
+            <button
+              className="primary-button"
+              onClick={() => setShowPatientDialog(false)}
+              style={{ width: '100%' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

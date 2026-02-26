@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 function DischargeHistory() {
   const [loading, setLoading] = useState(true)
@@ -35,6 +37,59 @@ function DischargeHistory() {
     }
   }, [])
 
+  const downloadPDF = () => {
+    try {
+      console.log('Generating PDF with', records.length, 'records')
+      const doc = new jsPDF()
+      
+      // Add title
+      doc.setFontSize(18)
+      doc.text('Discharge History Report', 14, 22)
+      
+      // Add generation date
+      doc.setFontSize(11)
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30)
+      
+      // Prepare table data
+      const tableData = records.map(record => [
+        record.name,
+        record.hospital,
+        record.status || 'N/A',
+        record.room || '-',
+        record.care || '-',
+        record.dischargedAt ? new Date(record.dischargedAt).toLocaleString() : '-',
+        record.reason || 'Discharged'
+      ])
+      
+      // Add table
+      autoTable(doc, {
+        startY: 35,
+        head: [['Patient', 'Hospital', 'Status', 'Room', 'Care', 'Discharged', 'Reason']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        styles: { fontSize: 9, cellPadding: 3 },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 30 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 15 },
+          4: { cellWidth: 20 },
+          5: { cellWidth: 35 },
+          6: { cellWidth: 35 }
+        }
+      })
+      
+      // Save the PDF
+      const fileName = `discharge-history-${new Date().toISOString().split('T')[0]}.pdf`
+      console.log('Saving PDF as:', fileName)
+      doc.save(fileName)
+    } catch (err) {
+      console.error('Error generating PDF:', err)
+      alert('Failed to generate PDF: ' + err.message)
+    }
+  }
+
   return (
     <div className="page-grid">
       <section className="panel">
@@ -43,13 +98,23 @@ function DischargeHistory() {
             <h3>Discharge History</h3>
             <p className="panel-subtitle">Database discharge records</p>
           </div>
-          <button
-            className="outline-button"
-            type="button"
-            onClick={() => window.location.reload()}
-          >
-            Refresh
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              className="outline-button"
+              type="button"
+              onClick={downloadPDF}
+              disabled={!records.length}
+            >
+              Download PDF
+            </button>
+            <button
+              className="outline-button"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {loading ? <p className="panel-subtitle">Loading...</p> : null}
