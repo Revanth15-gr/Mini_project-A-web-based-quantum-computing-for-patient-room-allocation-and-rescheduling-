@@ -983,11 +983,11 @@ function Emergency() {
             <h3 style={{ margin: '0 0 1rem 0', color: '#0f2241' }}>Patient Information Shared</h3>
             <div style={{ marginBottom: '1.5rem' }}>
               <div style={{ padding: '1rem', background: '#f9fafb', borderRadius: '8px', marginBottom: '1rem' }}>
-                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Case ID:</strong> {emergencyCase.caseId}</p>
-                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Incident:</strong> {emergencyCase.incident}</p>
-                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Severity:</strong> {emergencyCase.severity}</p>
-                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>ETA:</strong> {emergencyCase.eta}</p>
-                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Location:</strong> {emergencyCase.location}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Case ID:</strong> {selectedEmergency.caseId}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Incident:</strong> {selectedEmergency.incident}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Severity:</strong> {selectedEmergency.severity}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>ETA:</strong> {selectedEmergency.eta}</p>
+                <p style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}><strong>Location:</strong> {selectedEmergency.location}</p>
               </div>
               {assignedHospital && (
                 <div style={{ padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #10b981' }}>
