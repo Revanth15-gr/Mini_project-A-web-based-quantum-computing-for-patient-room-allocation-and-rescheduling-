@@ -351,7 +351,7 @@ app.post('/api/optimize', async (req, res) => {
   try {
     const response = await axios.post(`${QAOA_URL}/optimize`, req.body, {
       headers: { 'Content-Type': 'application/json' },
-      timeout: 120000,
+      timeout: 15000,
     })
     res.json(response.data)
   } catch (error) {

@@ -111,7 +111,7 @@ def solve_qaoa(cost_matrix: List[List[float]], patients: List[Patient], rooms: L
         )
 
     sampler = Sampler()
-    qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=20), reps=1)
+    qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=5), reps=1)
     optimizer = MinimumEigenOptimizer(qaoa)
     result = optimizer.solve(qp)
 
@@ -188,10 +188,15 @@ def optimize(payload: OptimizeRequest):
     else:
         cost_matrix = build_cost_matrix(payload.patients, payload.rooms)
 
-    try:
-        result = solve_qaoa(cost_matrix, payload.patients, payload.rooms)
-        result["solver"] = "qaoa"
-        return result
-    except Exception:
-        # Keep API stable for the UI by degrading gracefully instead of returning 500.
-        return solve_classical(cost_matrix, payload.patients, payload.rooms)
+    # QAOA quantum simulation is only feasible for very small inputs (≤ 3 patients).
+    # For larger inputs use the fast classical solver directly to keep the UI responsive.
+    n = max(len(payload.patients), len(payload.rooms))
+    if n <= 3:
+        try:
+            result = solve_qaoa(cost_matrix, payload.patients, payload.rooms)
+            result["solver"] = "qaoa"
+            return result
+        except Exception:
+            pass
+
+    return solve_classical(cost_matrix, payload.patients, payload.rooms)
