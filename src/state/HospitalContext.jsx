@@ -341,6 +341,16 @@ function HospitalProvider({ children }) {
   }
 
   const updatePatient = async (patientId, updates) => {
+    const matchesPatient = (patient) =>
+      (patientId && (patient._id === patientId || patient.id === patientId)) ||
+      (updates?.name && patient.name === updates.name)
+
+    if (!patientId) {
+      const localPatient = { ...updates }
+      setPatients((current) => current.map((patient) => (matchesPatient(patient) ? { ...patient, ...localPatient } : patient)))
+      return localPatient
+    }
+
     try {
       const response = await fetch(`/api/patients/${patientId}`, {
         method: 'PUT',
@@ -356,7 +366,7 @@ function HospitalProvider({ children }) {
       
       // Update local state
       setPatients((current) =>
-        current.map((p) => (p._id === patientId ? updatedPatient : p))
+        current.map((patient) => (matchesPatient(patient) ? { ...patient, ...updatedPatient } : patient))
       )
 
       return updatedPatient

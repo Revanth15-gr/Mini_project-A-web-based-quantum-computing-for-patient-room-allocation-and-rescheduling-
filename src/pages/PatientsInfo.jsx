@@ -6,6 +6,11 @@ function PatientsInfo() {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
   }
 
+  const getPatientKey = (patient, fallbackIndex = 0) =>
+    patient._id ||
+    patient.id ||
+    `${patient.hospital}:${patient.name}:${patient.room || 'unassigned'}:${patient.next || 'none'}:${fallbackIndex}`
+
   const [showForm, setShowForm] = useState(false)
   const [isRescheduling, setIsRescheduling] = useState(false)
   const [reschedulingResult, setReschedulingResult] = useState(null)
@@ -13,6 +18,7 @@ function PatientsInfo() {
   const [showRescheduleDialog, setShowRescheduleDialog] = useState(false)
   const [selectedPatients, setSelectedPatients] = useState([])
   const [isApplyingSchedule, setIsApplyingSchedule] = useState(false)
+  const [hasAppliedOptimizedSchedule, setHasAppliedOptimizedSchedule] = useState(false)
   const {
     rooms,
     patients,
@@ -104,15 +110,24 @@ function PatientsInfo() {
 
     setIsRescheduling(true)
     setReschedulingResult(null)
+    setHasAppliedOptimizedSchedule(false)
     setShowRescheduleDialog(false)
     pushAction('Starting quantum optimization rescheduling...')
     addNotification('Running QAOA optimization for patient rescheduling...', 'info')
 
     try {
       // Get only selected patients
-      const hospitalPatients = patients.filter((p) => 
-        p.hospital === selectedHospital && selectedPatients.includes(p._id || p.name)
+      const allSelectedPatients = patients.filter((patient, index) =>
+        patient.hospital === selectedHospital && selectedPatients.includes(getPatientKey(patient, index))
       )
+      // Deduplicate by name — prefer the entry that has a MongoDB _id
+      const nameMap = new Map()
+      for (const patient of allSelectedPatients) {
+        if (!nameMap.has(patient.name) || patient._id) {
+          nameMap.set(patient.name, patient)
+        }
+      }
+      const hospitalPatients = Array.from(nameMap.values())
       const hospitalRooms = rooms.filter((r) => r.hospital === selectedHospital)
 
       if (hospitalPatients.length === 0) {
@@ -130,7 +145,8 @@ function PatientsInfo() {
       // QAOA quantum simulation limited to 8 patients/rooms due to memory constraints
       const maxQaoaSize = 8
       const patientsForQaoa = hospitalPatients.slice(0, maxQaoaSize).map((p, i) => ({
-        id: p.name || `patient-${i}`,
+        id: getPatientKey(p, i),
+        label: p.name || `patient-${i}`,
         priority: 1.2 - i * 0.05,
       }))
       const roomsForQaoa = hospitalRooms.slice(0, maxQaoaSize).map((r) => r.name)
@@ -167,16 +183,36 @@ function PatientsInfo() {
 
       const result = await response.json()
       console.log('QAOA Rescheduling Result:', result)
+
+      const dedupedAssignments = []
+      const seenPatientIds = new Set()
+      const seenPatientNames = new Set()
+      for (const assignment of result.assignments || []) {
+        const assignmentKey = assignment.patientId || assignment.patient
+        const displayName = assignment.patientName || assignment.patient
+        if (seenPatientIds.has(assignmentKey) || (displayName && seenPatientNames.has(displayName))) {
+          continue
+        }
+        if (assignmentKey) seenPatientIds.add(assignmentKey)
+        if (displayName) seenPatientNames.add(displayName)
+        dedupedAssignments.push(assignment)
+      }
       
-      if (!result.assignments || result.assignments.length === 0) {
+      if (dedupedAssignments.length === 0) {
         throw new Error('No assignments returned from optimization')
       }
 
-      setReschedulingResult(result)
+      const normalizedResult = {
+        ...result,
+        assignments: dedupedAssignments,
+      }
+
+      setReschedulingResult(normalizedResult)
       addNotification('QAOA rescheduling completed successfully', 'success')
       pushAction(
-        `Rescheduling complete: ${result.assignments.length} patients optimized with cost ${result.cost?.toFixed(2) || 'N/A'}`
+        `Rescheduling complete: ${normalizedResult.assignments.length} patients optimized with cost ${normalizedResult.cost?.toFixed(2) || 'N/A'}`
       )
+      await applyOptimizedSchedule(normalizedResult)
     } catch (error) {
       console.error('Rescheduling error:', error)
       addNotification(`Rescheduling failed: ${error.message}`, 'error')
@@ -196,7 +232,7 @@ function PatientsInfo() {
     }
     
     // Pre-select all patients
-    setSelectedPatients(hospitalPatients.map(p => p._id || p.name))
+    setSelectedPatients(hospitalPatients.map((patient, index) => getPatientKey(patient, index)))
     
     // Open dialog
     setShowRescheduleDialog(true)
@@ -213,21 +249,21 @@ function PatientsInfo() {
 
   const handleSelectAll = () => {
     const hospitalPatients = patients.filter((p) => p.hospital === selectedHospital)
-    setSelectedPatients(hospitalPatients.map(p => p._id || p.name))
+    setSelectedPatients(hospitalPatients.map((patient, index) => getPatientKey(patient, index)))
   }
 
   const handleDeselectAll = () => {
     setSelectedPatients([])
   }
 
-  const handleApplyOptimizedSchedule = async () => {
-    if (!reschedulingResult || !reschedulingResult.assignments) {
+  const applyOptimizedSchedule = async (optimizationResult = reschedulingResult) => {
+    if (!optimizationResult || !optimizationResult.assignments) {
       addNotification('No optimization results to apply', 'error')
       return
     }
 
     setIsApplyingSchedule(true)
-    console.log('Applying optimized schedule:', reschedulingResult.assignments)
+    console.log('Applying optimized schedule:', optimizationResult.assignments)
     pushAction('Applying optimized room assignments...')
     addNotification('Applying optimized room assignments...', 'info')
 
@@ -236,19 +272,19 @@ function PatientsInfo() {
       let errorCount = 0
 
       // Update each patient with their new room assignment
-      for (const assignment of reschedulingResult.assignments) {
+      for (const assignment of optimizationResult.assignments) {
         try {
           // Find the patient by name
-          const patient = patients.find(p => p.name === assignment.patient)
+          const patient = patients.find((item, index) => getPatientKey(item, index) === assignment.patientId)
           
           if (!patient) {
-            console.warn(`Patient not found: ${assignment.patient}`)
+            console.warn(`Patient not found: ${assignment.patientName || assignment.patient}`)
             errorCount++
             continue
           }
 
           if (!assignment.room) {
-            console.warn(`No room assigned for: ${assignment.patient}`)
+            console.warn(`No room assigned for: ${assignment.patientName || assignment.patient}`)
             errorCount++
             continue
           }
@@ -256,14 +292,14 @@ function PatientsInfo() {
           // Update patient room assignment
           console.log(`Updating ${patient.name} from ${patient.room} to ${assignment.room}`)
           
-          await updatePatient(patient._id, {
+          await updatePatient(patient._id || patient.id, {
             ...patient,
             room: assignment.room
           })
 
           successCount++
         } catch (error) {
-          console.error(`Error updating patient ${assignment.patient}:`, error)
+          console.error(`Error updating patient ${assignment.patientName || assignment.patient}:`, error)
           errorCount++
         }
       }
@@ -279,6 +315,10 @@ function PatientsInfo() {
         pushAction(`Applied schedule: ${successCount} successful, ${errorCount} failed`)
       }
 
+      if (successCount > 0) {
+        setHasAppliedOptimizedSchedule(true)
+      }
+
       // Clear the results after applying
       setTimeout(() => {
         setReschedulingResult(null)
@@ -291,6 +331,10 @@ function PatientsInfo() {
     } finally {
       setIsApplyingSchedule(false)
     }
+  }
+
+  const handleApplyOptimizedSchedule = async () => {
+    await applyOptimizedSchedule(reschedulingResult)
   }
 
   return (
@@ -420,9 +464,9 @@ function PatientsInfo() {
             <span>Next Check</span>
             <span>Action</span>
           </div>
-          {filteredPatients.map((patient) => (
+          {filteredPatients.map((patient, idx) => (
             <div
-              key={patient.name}
+              key={patient._id || patient.id || `${patient.hospital}-${patient.name}-${idx}`}
               className="table-row table-row-7"
               onClick={() =>
                 pushAction(
@@ -535,22 +579,28 @@ function PatientsInfo() {
                     <div key={idx} className="queue-item">
                       <div className="queue-pulse" aria-hidden="true" />
                       <div>
-                        <p className="queue-title">{assignment.patient}</p>
+                        <p className="queue-title">{assignment.patientName || assignment.patient}</p>
                         <p className="queue-meta">Assigned to {assignment.room || 'No room available'}</p>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={handleApplyOptimizedSchedule}
-                    disabled={isApplyingSchedule}
-                    style={{ minWidth: '200px' }}
-                  >
-                    {isApplyingSchedule ? 'Applying Schedule...' : 'Apply Optimized Schedule'}
-                  </button>
+                  {hasAppliedOptimizedSchedule ? (
+                    <p style={{ color: '#1e6b52', fontWeight: 600, margin: 0 }}>
+                      Room numbers updated automatically after rescheduling.
+                    </p>
+                  ) : (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={handleApplyOptimizedSchedule}
+                      disabled={isApplyingSchedule}
+                      style={{ minWidth: '200px' }}
+                    >
+                      {isApplyingSchedule ? 'Applying Schedule...' : 'Apply Optimized Schedule'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -640,9 +690,9 @@ function PatientsInfo() {
                   No patients available in {selectedHospital}
                 </p>
               ) : (
-                patients.filter((p) => p.hospital === selectedHospital).map((patient) => (
+                patients.filter((p) => p.hospital === selectedHospital).map((patient, index) => (
                   <label 
-                    key={patient._id || patient.name}
+                    key={getPatientKey(patient, index)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -651,14 +701,14 @@ function PatientsInfo() {
                       border: '1px solid #e0e0e0',
                       marginBottom: '0.5rem',
                       cursor: 'pointer',
-                      backgroundColor: selectedPatients.includes(patient._id || patient.name) ? '#f0f8ff' : '#fff',
+                      backgroundColor: selectedPatients.includes(getPatientKey(patient, index)) ? '#f0f8ff' : '#fff',
                       transition: 'all 0.2s',
                     }}
                   >
                     <input
                       type="checkbox"
-                      checked={selectedPatients.includes(patient._id || patient.name)}
-                      onChange={() => handlePatientToggle(patient._id || patient.name)}
+                      checked={selectedPatients.includes(getPatientKey(patient, index))}
+                      onChange={() => handlePatientToggle(getPatientKey(patient, index))}
                       style={{ marginRight: '0.75rem', width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <div style={{ flex: 1 }}>

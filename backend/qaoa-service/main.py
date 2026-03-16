@@ -21,6 +21,7 @@ app.add_middleware(
 
 class Patient(BaseModel):
     id: str
+    label: Optional[str] = None
     priority: float = Field(default=1.0, ge=0.1)
 
 
@@ -28,6 +29,49 @@ class OptimizeRequest(BaseModel):
     rooms: List[str]
     patients: List[Patient]
     costMatrix: Optional[List[List[float]]] = None
+
+
+def solve_classical(cost_matrix: List[List[float]], patients: List[Patient], rooms: List[str]):
+    # Greedy fallback: assign each patient to the lowest-cost unassigned room.
+    available_rooms = set(range(len(rooms)))
+    assignments = []
+    total_cost = 0.0
+
+    for i, patient in enumerate(patients):
+        best_room_index = None
+        best_cost = None
+
+        for j in available_rooms:
+            candidate_cost = cost_matrix[i][j]
+            if best_cost is None or candidate_cost < best_cost:
+                best_cost = candidate_cost
+                best_room_index = j
+
+        if best_room_index is None:
+            assignments.append({
+                "patient": patient.label or patient.id,
+                "patientId": patient.id,
+                "patientName": patient.label or patient.id,
+                "room": None,
+            })
+            continue
+
+        assignments.append({
+            "patient": patient.label or patient.id,
+            "patientId": patient.id,
+            "patientName": patient.label or patient.id,
+            "room": rooms[best_room_index],
+        })
+        total_cost += float(best_cost)
+        available_rooms.remove(best_room_index)
+
+    return {
+        "cost": float(total_cost),
+        "assignments": assignments,
+        "probabilities": [],
+        "solver": "classical-fallback",
+        "message": "Used classical fallback because quantum solver failed for this workload.",
+    }
 
 
 def build_cost_matrix(patients: List[Patient], rooms: List[str]) -> List[List[float]]:
@@ -81,7 +125,12 @@ def solve_qaoa(cost_matrix: List[List[float]], patients: List[Patient], rooms: L
             if solution.get(f"x_{i}_{j}") == 1:
                 assigned_room = room
                 break
-        assignments.append({"patient": patient.id, "room": assigned_room})
+        assignments.append({
+            "patient": patient.label or patient.id,
+            "patientId": patient.id,
+            "patientName": patient.label or patient.id,
+            "room": assigned_room,
+        })
 
     probabilities = []
     if getattr(result, "samples", None):
@@ -96,7 +145,12 @@ def solve_qaoa(cost_matrix: List[List[float]], patients: List[Patient], rooms: L
                     if sample_solution.get(f"x_{i}_{j}") == 1:
                         assigned_room = room
                         break
-                sample_assignments.append({"patient": patient.id, "room": assigned_room})
+                sample_assignments.append({
+                    "patient": patient.label or patient.id,
+                    "patientId": patient.id,
+                    "patientName": patient.label or patient.id,
+                    "room": assigned_room,
+                })
             probabilities.append(
                 {
                     "probability": float(sample.probability),
@@ -134,4 +188,10 @@ def optimize(payload: OptimizeRequest):
     else:
         cost_matrix = build_cost_matrix(payload.patients, payload.rooms)
 
-    return solve_qaoa(cost_matrix, payload.patients, payload.rooms)
+    try:
+        result = solve_qaoa(cost_matrix, payload.patients, payload.rooms)
+        result["solver"] = "qaoa"
+        return result
+    except Exception:
+        # Keep API stable for the UI by degrading gracefully instead of returning 500.
+        return solve_classical(cost_matrix, payload.patients, payload.rooms)

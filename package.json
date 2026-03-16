@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:gateway": "node backend/gateway/server.js",
-    "dev:qaoa": "py -m uvicorn main:app --reload --app-dir backend/qaoa-service",
+    "dev:qaoa": "py -3.11 -m uvicorn main:app --reload --app-dir backend/qaoa-service",
     "dev:all": "concurrently -k -n WEB,GATEWAY,QAOA -c cyan,magenta,green \"npm run dev\" \"npm run dev:gateway\" \"npm run dev:qaoa\"",
     "build": "npm --prefix backend/gateway install && npx vite build",
     "postinstall": "npm --prefix backend/gateway install && py -m pip install -r backend/qaoa-service/requirements.txt",

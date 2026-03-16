@@ -30,6 +30,38 @@ app.use(express.static(distPath))
 
 let dbConnected = false
 
+const buildFallbackOptimization = (payload = {}) => {
+  const patients = Array.isArray(payload.patients) ? payload.patients : []
+  const rooms = Array.isArray(payload.rooms) ? payload.rooms : []
+
+  const assignments = []
+  let cost = 0
+
+  for (let i = 0; i < patients.length; i += 1) {
+    const patient = patients[i]
+    const room = i < rooms.length ? rooms[i] : null
+    assignments.push({
+      patient: patient?.label ?? patient?.name ?? patient?.id ?? `patient-${i + 1}`,
+      patientId: patient?.id ?? `patient-${i + 1}`,
+      patientName: patient?.label ?? patient?.name ?? patient?.id ?? `patient-${i + 1}`,
+      room,
+    })
+
+    if (room !== null) {
+      const priority = Number(patient?.priority) || 1
+      cost += (Math.abs(i - i) + 1) / Math.max(priority, 0.1)
+    }
+  }
+
+  return {
+    cost,
+    assignments,
+    probabilities: [],
+    solver: 'gateway-fallback',
+    message: 'Used fallback optimizer because QAOA service was unavailable or failed.',
+  }
+}
+
 // MongoDB Connection (non-blocking)
 mongoose
   .connect(MONGODB_URI)
@@ -212,10 +244,55 @@ app.put('/api/patients/:id', async (req, res) => {
     if (!dbConnected) {
       return res.status(503).json({ error: 'Database not connected' })
     }
-    const patient = await Patient.findByIdAndUpdate(req.params.id, req.body, { new: true })
-    if (!patient) {
+    const existingPatient = await Patient.findById(req.params.id)
+    if (!existingPatient) {
       return res.status(404).json({ error: 'Patient not found' })
     }
+
+    const nextHospital = req.body.hospital || existingPatient.hospital
+    const nextName = req.body.name || existingPatient.name
+    const nextRoom = Object.prototype.hasOwnProperty.call(req.body, 'room')
+      ? req.body.room
+      : existingPatient.room
+    const roomChanged = nextRoom !== existingPatient.room || nextHospital !== existingPatient.hospital
+    let nextRoomId = existingPatient.roomId || null
+
+    if (roomChanged && existingPatient.room && existingPatient.hospital) {
+      await Room.findOneAndUpdate(
+        { name: existingPatient.room, hospital: existingPatient.hospital },
+        {
+          status: 'Available',
+          patientId: null,
+          patientName: null,
+        },
+      )
+    }
+
+    if (nextRoom && nextHospital) {
+      const occupiedRoom = await Room.findOneAndUpdate(
+        { name: nextRoom, hospital: nextHospital },
+        {
+          status: 'Occupied',
+          patientId: existingPatient._id,
+          patientName: nextName,
+        },
+        { new: true },
+      )
+      nextRoomId = occupiedRoom?._id || null
+    } else {
+      nextRoomId = null
+    }
+
+    const patient = await Patient.findByIdAndUpdate(
+      req.params.id,
+      {
+        ...req.body,
+        room: nextRoom,
+        roomId: nextRoomId,
+      },
+      { new: true },
+    )
+
     res.json(patient)
   } catch (error) {
     res.status(400).json({ error: error.message })
@@ -280,6 +357,12 @@ app.post('/api/optimize', async (req, res) => {
   } catch (error) {
     const status = error.response?.status || 500
     const message = error.response?.data?.detail || error.message
+
+    // For server-side optimization failures, degrade gracefully instead of surfacing 500.
+    if (status >= 500) {
+      return res.json(buildFallbackOptimization(req.body))
+    }
+
     res.status(status).json({ detail: message })
   }
 })
