@@ -162,8 +162,17 @@ function HospitalProvider({ children }) {
           // Handle both array and object with 'value' property
           const patientsArray = Array.isArray(data) ? data : (data.value || [])
           if (patientsArray.length > 0) {
-            console.log('✅ Loaded', patientsArray.length, 'patients from MongoDB')
-            setPatients(patientsArray)
+            // Deduplicate by name+hospital — keep the most recently created (_id sorts lexicographically)
+            const seen = new Map()
+            for (const p of patientsArray) {
+              const key = `${p.hospital}||${p.name}`
+              if (!seen.has(key) || (p._id && (!seen.get(key)._id || p._id > seen.get(key)._id))) {
+                seen.set(key, p)
+              }
+            }
+            const uniquePatients = Array.from(seen.values())
+            console.log('✅ Loaded', uniquePatients.length, 'patients from MongoDB (deduplicated from', patientsArray.length, ')')
+            setPatients(uniquePatients)
           }
         }
       } catch (error) {
@@ -241,7 +250,13 @@ function HospitalProvider({ children }) {
       
       const savedPatient = await response.json()
       console.log('✅ Patient saved to MongoDB:', savedPatient)
-      setPatients((current) => [savedPatient, ...current])
+      // Replace any existing entry with the same name+hospital, then prepend the saved record
+      setPatients((current) => [
+        savedPatient,
+        ...current.filter(
+          (p) => !(p.name === savedPatient.name && p.hospital === savedPatient.hospital)
+        ),
+      ])
       addNotification(`✓ Patient added and saved to MongoDB`, 'success')
       return assignedRoom
     } catch (error) {
