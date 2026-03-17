@@ -325,80 +325,60 @@ function PatientsInfo() {
 
     setIsApplyingSchedule(true)
     console.log('Applying optimized schedule:', optimizationResult.assignments)
-    pushAction('Applying optimized room assignments...')
-    addNotification('Applying optimized room assignments...', 'info')
 
-    try {
-      let successCount = 0
-      let errorCount = 0
-
-      // Update each patient with their new room assignment
-      for (const assignment of optimizationResult.assignments) {
-        try {
-          if (!assignment.room) {
-            console.warn(`No room assigned for: ${assignment.patientName || assignment.patient}`)
-            errorCount++
-            continue
-          }
-
-          // Find patient by _id, then id, then composite key, then by name as last resort
-          const patient = patients.find((item) => {
-            if (assignment.patientId) {
-              if (item._id && item._id === assignment.patientId) return true
-              if (item.id && item.id === assignment.patientId) return true
-            }
-            if (assignment.patientName && item.name === assignment.patientName) return true
-            if (assignment.patient && item.name === assignment.patient) return true
-            return false
-          })
-
-          if (!patient) {
-            console.warn(`Patient not found for assignment:`, assignment)
-            errorCount++
-            continue
-          }
-
-          console.log(`Updating ${patient.name} from ${patient.room} to ${assignment.room}`)
-
-          await updatePatient(patient._id || patient.id || null, {
-            ...patient,
-            room: assignment.room
-          })
-
-          successCount++
-        } catch (error) {
-          console.error(`Error updating patient ${assignment.patientName || assignment.patient}:`, error)
-          errorCount++
-        }
-      }
-
-      if (errorCount === 0) {
-        addNotification(`✓ Successfully applied optimized schedule to ${successCount} patients`, 'success')
-        pushAction(`Applied optimized schedule to ${successCount} patients`)
-      } else {
-        addNotification(
-          `Applied schedule: ${successCount} successful, ${errorCount} failed`,
-          'warning'
-        )
-        pushAction(`Applied schedule: ${successCount} successful, ${errorCount} failed`)
-      }
-
-      if (successCount > 0) {
-        setHasAppliedOptimizedSchedule(true)
-      }
-
-      // Clear the results after applying
-      setTimeout(() => {
-        setReschedulingResult(null)
-      }, 3000)
-
-    } catch (error) {
-      console.error('Error applying optimized schedule:', error)
-      addNotification(`Failed to apply schedule: ${error.message}`, 'error')
-      pushAction(`Error applying schedule: ${error.message}`)
-    } finally {
-      setIsApplyingSchedule(false)
+    // Build a lookup: patientName / patientId → new room
+    const roomUpdates = new Map()
+    for (const assignment of optimizationResult.assignments) {
+      if (!assignment.room) continue
+      const nameKey = (assignment.patientName || assignment.patient || '').trim().toLowerCase()
+      const idKey = assignment.patientId || null
+      if (idKey) roomUpdates.set(idKey, assignment.room)
+      if (nameKey) roomUpdates.set(nameKey, assignment.room)
     }
+
+    // Step 1: Update ALL matching patients in local state at once so UI reflects changes immediately
+    setPatients((current) =>
+      current.map((p) => {
+        const idKey = p._id || p.id || null
+        const nameKey = (p.name || '').trim().toLowerCase()
+        const newRoom = (idKey && roomUpdates.has(idKey))
+          ? roomUpdates.get(idKey)
+          : (nameKey && roomUpdates.has(nameKey))
+            ? roomUpdates.get(nameKey)
+            : null
+        if (!newRoom || newRoom === p.room) return p
+        console.log(`Room update: ${p.name} → ${newRoom}`)
+        return { ...p, room: newRoom }
+      })
+    )
+
+    const appliedCount = optimizationResult.assignments.filter((a) => a.room).length
+    addNotification(`✓ Room assignments updated for ${appliedCount} patients`, 'success')
+    pushAction(`Applied optimized schedule to ${appliedCount} patients`)
+    setHasAppliedOptimizedSchedule(true)
+
+    // Step 2: Persist to MongoDB in background (non-blocking)
+    for (const assignment of optimizationResult.assignments) {
+      if (!assignment.room) continue
+      const patient = patients.find((item) => {
+        if (assignment.patientId) {
+          if (item._id && item._id === assignment.patientId) return true
+          if (item.id && item.id === assignment.patientId) return true
+        }
+        if (assignment.patientName && item.name === assignment.patientName) return true
+        if (assignment.patient && item.name === assignment.patient) return true
+        return false
+      })
+      if (!patient || !patient._id) continue
+      fetch(`/api/patients/${patient._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...patient, room: assignment.room }),
+      }).catch((err) => console.warn(`Background room persist failed for ${patient.name}:`, err.message))
+    }
+
+    setTimeout(() => setReschedulingResult(null), 4000)
+    setIsApplyingSchedule(false)
   }
 
   const handleApplyOptimizedSchedule = async () => {
