@@ -115,6 +115,26 @@ function PatientsInfo() {
     pushAction('Starting quantum optimization rescheduling...')
     addNotification('Running QAOA optimization for patient rescheduling...', 'info')
 
+    let patientsForQaoa = []
+    let roomsForQaoa = []
+
+    const buildOfflineResult = () => {
+      const offlineAssignments = patientsForQaoa.map((patient, index) => ({
+        patient: patient.label || patient.id,
+        patientId: patient.id,
+        patientName: patient.label || patient.id,
+        room: roomsForQaoa[index] || null,
+      }))
+
+      return {
+        cost: offlineAssignments.filter((item) => item.room).length,
+        assignments: offlineAssignments,
+        probabilities: [],
+        solver: 'frontend-fallback',
+        message: 'Optimization service unavailable. Used local fallback assignment.',
+      }
+    }
+
     try {
       // Get only selected patients
       const allSelectedPatients = patients.filter((patient, index) =>
@@ -144,12 +164,12 @@ function PatientsInfo() {
 
       // QAOA quantum simulation limited to 8 patients/rooms due to memory constraints
       const maxQaoaSize = 8
-      const patientsForQaoa = hospitalPatients.slice(0, maxQaoaSize).map((p, i) => ({
+      patientsForQaoa = hospitalPatients.slice(0, maxQaoaSize).map((p, i) => ({
         id: getPatientKey(p, i),
         label: p.name || `patient-${i}`,
         priority: 1.2 - i * 0.05,
       }))
-      const roomsForQaoa = hospitalRooms.slice(0, maxQaoaSize).map((r) => r.name)
+      roomsForQaoa = hospitalRooms.slice(0, maxQaoaSize).map((r) => r.name)
       
       if (hospitalPatients.length > maxQaoaSize) {
         addNotification(
@@ -164,14 +184,47 @@ function PatientsInfo() {
         hospital: selectedHospital
       })
 
-      const response = await fetch('/api/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patients: patientsForQaoa,
-          rooms: roomsForQaoa,
-        }),
+      const optimizePayload = JSON.stringify({
+        patients: patientsForQaoa,
+        rooms: roomsForQaoa,
       })
+
+      const optimizeEndpoints = [
+        '/api/optimize',
+        'http://127.0.0.1:4000/api/optimize',
+        'http://localhost:4000/api/optimize',
+        'http://127.0.0.1:8000/optimize',
+        'http://localhost:8000/optimize',
+      ]
+
+      let response = null
+      let lastFetchError = null
+
+      for (const endpoint of optimizeEndpoints) {
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: optimizePayload,
+          })
+          break
+        } catch (fetchError) {
+          lastFetchError = fetchError
+        }
+      }
+
+      if (!response) {
+        const offlineResult = buildOfflineResult()
+
+        setReschedulingResult(offlineResult)
+        addNotification('Optimization service unreachable. Applied local fallback scheduling.', 'warning')
+        pushAction(
+          `Fallback schedule applied: ${offlineResult.assignments.length} patients` +
+            (lastFetchError?.message ? ` (${lastFetchError.message})` : '')
+        )
+        await applyOptimizedSchedule(offlineResult)
+        return
+      }
 
       console.log('Response status:', response.status)
 
@@ -215,8 +268,16 @@ function PatientsInfo() {
       await applyOptimizedSchedule(normalizedResult)
     } catch (error) {
       console.error('Rescheduling error:', error)
-      addNotification(`Rescheduling failed: ${error.message}`, 'error')
-      pushAction(`Rescheduling error: ${error.message}`)
+      const offlineResult = buildOfflineResult()
+      if (offlineResult.assignments.length > 0) {
+        setReschedulingResult(offlineResult)
+        addNotification('Network issue detected. Applied local fallback scheduling.', 'warning')
+        pushAction('Rescheduling service unreachable. Applied local fallback schedule.')
+        await applyOptimizedSchedule(offlineResult)
+      } else {
+        addNotification(`Rescheduling failed: ${error.message}`, 'error')
+        pushAction(`Rescheduling error: ${error.message}`)
+      }
     } finally {
       setIsRescheduling(false)
     }
