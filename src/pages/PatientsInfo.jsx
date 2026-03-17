@@ -335,25 +335,32 @@ function PatientsInfo() {
       // Update each patient with their new room assignment
       for (const assignment of optimizationResult.assignments) {
         try {
-          // Find the patient by name
-          const patient = patients.find((item, index) => getPatientKey(item, index) === assignment.patientId)
-          
-          if (!patient) {
-            console.warn(`Patient not found: ${assignment.patientName || assignment.patient}`)
-            errorCount++
-            continue
-          }
-
           if (!assignment.room) {
             console.warn(`No room assigned for: ${assignment.patientName || assignment.patient}`)
             errorCount++
             continue
           }
 
-          // Update patient room assignment
+          // Find patient by _id, then id, then composite key, then by name as last resort
+          const patient = patients.find((item) => {
+            if (assignment.patientId) {
+              if (item._id && item._id === assignment.patientId) return true
+              if (item.id && item.id === assignment.patientId) return true
+            }
+            if (assignment.patientName && item.name === assignment.patientName) return true
+            if (assignment.patient && item.name === assignment.patient) return true
+            return false
+          })
+
+          if (!patient) {
+            console.warn(`Patient not found for assignment:`, assignment)
+            errorCount++
+            continue
+          }
+
           console.log(`Updating ${patient.name} from ${patient.room} to ${assignment.room}`)
-          
-          await updatePatient(patient._id || patient.id, {
+
+          await updatePatient(patient._id || patient.id || null, {
             ...patient,
             room: assignment.room
           })
