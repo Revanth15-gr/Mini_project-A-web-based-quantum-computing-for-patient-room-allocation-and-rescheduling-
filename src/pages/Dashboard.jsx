@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
 
 const rooms = ['Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105', 'Room 106', 'Room 107', 'Room 108', 'Room 109', 'Room 110', 'Room 111', 'Room 112', 'Room 113', 'Room 114', 'Room 115', 'Room 116', 'Room 117', 'Room 118', 'Room 119', 'Room 120']
@@ -89,11 +89,30 @@ const changes = [
   { name: 'John Miller', from: 'Room 102', to: 'Room 103' },
 ]
 
-const metrics = [
-  { label: 'Schedule Adjustments', value: '83%', chart: 'ring' },
-  { label: 'Latency', value: '1.2s', chart: 'line' },
-  { label: 'Fairness Index', value: '0.94', chart: 'bars' },
-]
+const REPORT_STORAGE_KEY = 'optimizationReportData'
+const RUN_HISTORY_KEY = 'optimizationRunHistory'
+
+function formatLatency(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return '1.2s'
+  }
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+function computeFairness(assignmentsList, roomNames) {
+  if (!assignmentsList?.length || !roomNames?.length) {
+    return 0.94
+  }
+  const roomLoad = roomNames.map((roomName) =>
+    assignmentsList.filter((item) => item.room === roomName).length
+  )
+  const sum = roomLoad.reduce((acc, val) => acc + val, 0)
+  const sumSquares = roomLoad.reduce((acc, val) => acc + val * val, 0)
+  if (sum === 0 || sumSquares === 0) {
+    return 0
+  }
+  return Number(((sum * sum) / (roomLoad.length * sumSquares)).toFixed(2))
+}
 
 function getAssignment(time, room) {
   return assignments.find((item) => item.time === time && item.room === room)
@@ -109,6 +128,8 @@ function Dashboard() {
   const [activeTab, setActiveTab] = useState('scheduler')
   const [qaoaResult, setQaoaResult] = useState(null)
   const [qaoaError, setQaoaError] = useState('')
+  const [optimizationLatencyMs, setOptimizationLatencyMs] = useState(1200)
+  const [runHistory, setRunHistory] = useState([])
 
   const qaoaPatients = useMemo(
     () =>
@@ -116,11 +137,23 @@ function Dashboard() {
         .filter((p) => p.hospital === selectedHospital)
         .slice(0, 6)
         .map((patient, index) => ({
-          id: patient.name,
+          id: patient._id || patient.id || `${patient.hospital}-${patient.name}-${index}`,
+          label: patient.name,
           priority: 1.2 - index * 0.05,
         })),
     [patients, selectedHospital]
   )
+
+  useEffect(() => {
+    try {
+      const storedHistory = JSON.parse(localStorage.getItem(RUN_HISTORY_KEY) || '[]')
+      if (Array.isArray(storedHistory)) {
+        setRunHistory(storedHistory)
+      }
+    } catch {
+      setRunHistory([])
+    }
+  }, [])
 
   const currentRoomAssignments = useMemo(() => {
     const assignmentMap = {}
@@ -148,13 +181,100 @@ function Dashboard() {
   }, [qaoaResult])
 
   const satisfactionTrend = useMemo(() => {
-    const base = [62, 68, 72, 76]
+    const historyTrend = runHistory.slice(-4).map((item) => item.satisfaction)
+    const base = historyTrend.length ? historyTrend : [62, 68, 72, 76]
     return [...base, satisfactionScore]
-  }, [satisfactionScore])
+  }, [runHistory, satisfactionScore])
+
+  const scheduleAdjustments = useMemo(() => {
+    if (!qaoaResult?.assignments?.length) {
+      return 0
+    }
+    const patientMap = new Map(
+      patients
+        .filter((p) => p.hospital === selectedHospital)
+        .map((p) => [p.name, p])
+    )
+    return qaoaResult.assignments.filter((item) => {
+      const patientName = item.patientName || item.patient
+      const existingPatient = patientMap.get(patientName)
+      return existingPatient && item.room && existingPatient.room !== item.room
+    }).length
+  }, [patients, qaoaResult, selectedHospital])
+
+  const fairnessIndex = useMemo(
+    () => computeFairness(qaoaResult?.assignments || [], hospitalRooms.map((r) => r.name)),
+    [hospitalRooms, qaoaResult]
+  )
+
+  const throughputValue = useMemo(() => {
+    if (!qaoaResult?.assignments?.length || !optimizationLatencyMs) {
+      return 0
+    }
+    const assignedCount = qaoaResult.assignments.filter((item) => item.room).length
+    return Number((assignedCount / Math.max(optimizationLatencyMs / 1000, 0.001)).toFixed(1))
+  }, [optimizationLatencyMs, qaoaResult])
+
+  const metrics = useMemo(
+    () => [
+      {
+        label: 'Schedule Adjustments',
+        value: qaoaResult ? `${scheduleAdjustments}` : '0',
+        chart: 'ring',
+      },
+      {
+        label: 'Latency',
+        value: formatLatency(optimizationLatencyMs),
+        chart: 'line',
+      },
+      {
+        label: 'Fairness Index',
+        value: fairnessIndex.toFixed(2),
+        chart: 'bars',
+      },
+    ],
+    [fairnessIndex, optimizationLatencyMs, qaoaResult, scheduleAdjustments]
+  )
+
+  const buildReportPayload = (overrides = {}) => {
+    const generatedAt = new Date().toISOString()
+    return {
+      generatedAt,
+      selectedHospital,
+      solver: qaoaResult?.solver || 'not-run',
+      cost: Number.isFinite(qaoaResult?.cost) ? qaoaResult.cost : null,
+      latencyMs: optimizationLatencyMs,
+      throughput: throughputValue,
+      satisfactionScore,
+      fairnessIndex,
+      scheduleAdjustments,
+      assignments: qaoaResult?.assignments || [],
+      probabilities: qaoaResult?.probabilities || [],
+      trend: satisfactionTrend,
+      runHistory: runHistory.slice(-10),
+      system: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        cores: navigator.hardwareConcurrency || 'n/a',
+        deviceMemoryGB: navigator.deviceMemory || 'n/a',
+        online: navigator.onLine,
+      },
+      ...overrides,
+    }
+  }
+
+  const saveAndOpenReport = () => {
+    const reportPayload = buildReportPayload()
+
+    localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(reportPayload))
+    window.open('/optimization-report', '_blank', 'noopener,noreferrer')
+    pushAction('Opened full optimization report in a new tab')
+  }
 
   const handleOptimize = async () => {
     setOptimizing(true)
     setQaoaError('')
+    const startedAt = performance.now()
     try {
       // QAOA quantum simulation limited to 8 patients/rooms due to memory constraints
       const maxQaoaSize = 8
@@ -191,6 +311,50 @@ function Dashboard() {
       const data = await response.json()
       console.log('QAOA Result:', data)
       setQaoaResult(data)
+
+      const elapsedMs = performance.now() - startedAt
+      setOptimizationLatencyMs(elapsedMs)
+
+      const assignedCount = (data.assignments || []).filter((item) => item.room).length
+      const currentPatientMap = new Map(
+        patients
+          .filter((p) => p.hospital === selectedHospital)
+          .map((p) => [p.name, p])
+      )
+      const adjustmentsForRun = (data.assignments || []).filter((item) => {
+        const patientName = item.patientName || item.patient
+        const existingPatient = currentPatientMap.get(patientName)
+        return existingPatient && item.room && existingPatient.room !== item.room
+      }).length
+
+      const runItem = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        satisfaction: data.assignments?.length
+          ? Math.round((assignedCount / data.assignments.length) * 100)
+          : 0,
+        throughput: Number((assignedCount / Math.max(elapsedMs / 1000, 0.001)).toFixed(1)),
+        latencyMs: Number(elapsedMs.toFixed(1)),
+      }
+      const nextHistory = [...runHistory, runItem].slice(-12)
+      setRunHistory(nextHistory)
+      localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify(nextHistory))
+
+      const liveReportPayload = buildReportPayload({
+        generatedAt: new Date().toISOString(),
+        solver: data?.solver || 'qaoa',
+        cost: Number.isFinite(data?.cost) ? data.cost : null,
+        latencyMs: elapsedMs,
+        throughput: Number((assignedCount / Math.max(elapsedMs / 1000, 0.001)).toFixed(1)),
+        satisfactionScore: runItem.satisfaction,
+        fairnessIndex: computeFairness(data?.assignments || [], roomNames),
+        scheduleAdjustments: adjustmentsForRun,
+        assignments: data?.assignments || [],
+        probabilities: data?.probabilities || [],
+        trend: [...(nextHistory.slice(-4).map((item) => item.satisfaction) || []), runItem.satisfaction],
+        runHistory: nextHistory.slice(-10),
+      })
+      localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(liveReportPayload))
     } catch (error) {
       console.error('QAOA Error:', error)
       setQaoaError(error.message || 'Unable to reach QAOA service')
@@ -431,7 +595,7 @@ function Dashboard() {
             <button
               className="ghost-button"
               type="button"
-              onClick={() => pushAction('Loading full optimization report...')}
+              onClick={saveAndOpenReport}
             >
               View Full Report
             </button>
@@ -439,14 +603,17 @@ function Dashboard() {
           <div className="insight-row">
             <div className="insight-graph">
               <div className="bar-chart">
-                {[20, 35, 25, 50, 65, 60, 78, 82].map((value, index) => (
+                {(runHistory.length
+                  ? runHistory.slice(-8).map((item) => Math.max(12, Math.min(100, item.throughput * 10)))
+                  : [20, 35, 25, 50, 65, 60, 78, 82]
+                ).map((value, index) => (
                   <span
                     key={`bar-${value}-${index}`}
                     style={{ height: `${value}%` }}
                   />
                 ))}
               </div>
-              <p className="chart-label">Optimization throughput</p>
+              <p className="chart-label">Optimization throughput {throughputValue || 0} assignments/s</p>
             </div>
             <div className="insight-graph">
               <div className="line-chart">

@@ -386,12 +386,9 @@ function HospitalProvider({ children }) {
 
       return updatedPatient
     } catch (error) {
-      console.error('Error updating patient (API):', error)
-      // Always update local state even if API fails so room shows in UI immediately
-      setPatients((current) =>
-        current.map((patient) => (matchesPatient(patient) ? { ...patient, ...updates } : patient))
-      )
-      return { ...updates }
+      console.error('Error updating patient:', error)
+      addNotification(`Failed to update patient: ${error.message}`, 'error')
+      throw error
     }
   }
 
