@@ -188,6 +188,61 @@
   gap: 1.5rem;
 }
 
+.hospitals-add-form {
+  padding: 1.2rem;
+}
+
+.hospitals-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.hospitals-add-grid label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hospitals-add-grid input,
+.hospitals-add-grid select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 34, 65, 0.1);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  background: #f8fafc;
+}
+
+.hospitals-form-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.hospitals-detail {
+  padding: 1.2rem;
+}
+
+.hospitals-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.9rem;
+}
+
+.hospitals-detail-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 0.2rem;
+}
+
+.hospitals-detail-grid strong {
+  font-size: 1rem;
+}
+
 .assignment-chart {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));

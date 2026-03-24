@@ -433,7 +433,8 @@ function Dashboard() {
                   {qaoaResult.probabilities?.length ? (
                     qaoaResult.probabilities.map((item, index) => (
                       <li key={`prob-${index}`}>
-                        {(item.probability * 100).toFixed(1)}% top sample
+                        {(item.probability * 100).toFixed(1)}% {item.label || `Sample ${index + 1}`}
+                        {item.estimated ? ' (estimated)' : ''}
                       </li>
                     ))
                   ) : (

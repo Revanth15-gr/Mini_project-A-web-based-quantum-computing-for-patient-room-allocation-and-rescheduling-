@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './Hospitals.css'
+import { HospitalContext } from '../state/HospitalContext.jsx'
 
 const HOSPITALS = [
   // Coastal Andhra District
@@ -280,13 +282,95 @@ function pushAction(message) {
 }
 
 function Hospitals() {
+  const navigate = useNavigate()
+  const { addNotification } = useContext(HospitalContext)
+  const [hospitalsData, setHospitalsData] = useState(HOSPITALS)
   const [searchQuery, setSearchQuery] = useState('')
   const [locationQuery, setLocationQuery] = useState('')
   const [specialtyFilter, setSpecialtyFilter] = useState('All Specialties')
   const [districtFilter, setDistrictFilter] = useState('All Districts')
+  const [selectedHospitalCard, setSelectedHospitalCard] = useState(null)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newHospital, setNewHospital] = useState({
+    name: '',
+    location: '',
+    specialty: 'General Medicine',
+    district: 'Coastal Andhra',
+    rooms: 20,
+  })
+
+  const notifyAction = (message, type = 'info') => {
+    pushAction(message)
+    addNotification(message, type)
+  }
+
+  const handleAddHospitalClick = () => {
+    setShowAddForm((current) => !current)
+    notifyAction(showAddForm ? 'Add hospital form closed' : 'Add hospital form opened')
+  }
+
+  const handleAddHospitalSubmit = (event) => {
+    event.preventDefault()
+
+    if (!newHospital.name.trim() || !newHospital.location.trim()) {
+      notifyAction('Hospital name and location are required', 'error')
+      return
+    }
+
+    const exists = hospitalsData.some(
+      (hospital) => hospital.name.toLowerCase() === newHospital.name.trim().toLowerCase(),
+    )
+    if (exists) {
+      notifyAction('Hospital already exists', 'error')
+      return
+    }
+
+    const nextId = hospitalsData.reduce((maxId, hospital) => Math.max(maxId, hospital.id), 0) + 1
+    const createdHospital = {
+      id: nextId,
+      name: newHospital.name.trim(),
+      location: newHospital.location.trim(),
+      specialty: newHospital.specialty,
+      district: newHospital.district,
+      rooms: Number(newHospital.rooms) || 20,
+      doctors: 0,
+      patients: 0,
+      occupancy: 0,
+      image:
+        newHospital.district === 'Rayalaseema'
+          ? 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)'
+          : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    }
+
+    setHospitalsData((current) => [createdHospital, ...current])
+    setShowAddForm(false)
+    setNewHospital({
+      name: '',
+      location: '',
+      specialty: 'General Medicine',
+      district: 'Coastal Andhra',
+      rooms: 20,
+    })
+    notifyAction(`Added ${createdHospital.name} successfully`, 'success')
+  }
+
+  const handleViewDetails = (hospital) => {
+    setSelectedHospitalCard(hospital)
+    notifyAction(`Viewing details for ${hospital.name}`)
+  }
+
+  const handleManageHospital = (hospital) => {
+    notifyAction(`Managing ${hospital.name} in Rooms page`, 'info')
+    navigate('/rooms')
+  }
+
+  const handleViewDoctorAnalytics = () => {
+    notifyAction('Opening doctor analytics', 'info')
+    navigate('/analytics')
+  }
 
   const filteredHospitals = useMemo(() => {
-    return HOSPITALS.filter((hospital) => {
+    return hospitalsData.filter((hospital) => {
       const matchesSearch = hospital.name
         .toLowerCase()
         .includes(searchQuery.trim().toLowerCase())
@@ -299,7 +383,7 @@ function Hospitals() {
         districtFilter === 'All Districts' || hospital.district === districtFilter
       return matchesSearch && matchesLocation && matchesSpecialty && matchesDistrict
     })
-  }, [searchQuery, locationQuery, specialtyFilter, districtFilter])
+  }, [hospitalsData, searchQuery, locationQuery, specialtyFilter, districtFilter])
 
   const totals = filteredHospitals.reduce(
     (acc, hospital) => {
@@ -328,11 +412,103 @@ function Hospitals() {
         <button
           className="primary-button"
           type="button"
-          onClick={() => pushAction('Add hospital form opened')}
+          onClick={handleAddHospitalClick}
         >
-          Add Hospital
+          {showAddForm ? 'Close Form' : 'Add Hospital'}
         </button>
       </header>
+
+      {showAddForm ? (
+        <section className="hospitals-add-form panel">
+          <div className="panel-header">
+            <div>
+              <h3>Add Hospital</h3>
+              <p className="panel-subtitle">Create a new hospital entry</p>
+            </div>
+          </div>
+          <form className="hospitals-add-grid" onSubmit={handleAddHospitalSubmit}>
+            <label>
+              Hospital Name
+              <input
+                type="text"
+                value={newHospital.name}
+                onChange={(event) =>
+                  setNewHospital((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Enter hospital name"
+              />
+            </label>
+            <label>
+              Location
+              <input
+                type="text"
+                value={newHospital.location}
+                onChange={(event) =>
+                  setNewHospital((current) => ({ ...current, location: event.target.value }))
+                }
+                placeholder="Enter city or region"
+              />
+            </label>
+            <label>
+              District
+              <select
+                value={newHospital.district}
+                onChange={(event) =>
+                  setNewHospital((current) => ({ ...current, district: event.target.value }))
+                }
+              >
+                {DISTRICTS.filter((item) => item !== 'All Districts').map((district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Specialty
+              <select
+                value={newHospital.specialty}
+                onChange={(event) =>
+                  setNewHospital((current) => ({ ...current, specialty: event.target.value }))
+                }
+              >
+                {SPECIALTIES.filter((item) => item !== 'All Specialties').map((specialty) => (
+                  <option key={specialty} value={specialty}>
+                    {specialty}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Rooms
+              <input
+                type="number"
+                min="1"
+                max="200"
+                value={newHospital.rooms}
+                onChange={(event) =>
+                  setNewHospital((current) => ({ ...current, rooms: event.target.value }))
+                }
+              />
+            </label>
+            <div className="hospitals-form-actions">
+              <button className="primary-button" type="submit">
+                Save Hospital
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setShowAddForm(false)
+                  notifyAction('Add hospital canceled')
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
       <section className="hospitals-kpis">
         <div className="kpi-card">
@@ -436,14 +612,14 @@ function Hospitals() {
                 <button
                   className="ghost-button"
                   type="button"
-                  onClick={() => pushAction(`Viewing details for ${hospital.name}`)}
+                  onClick={() => handleViewDetails(hospital)}
                 >
                   View Details
                 </button>
                 <button
                   className="outline-button"
                   type="button"
-                  onClick={() => pushAction(`Managing ${hospital.name}`)}
+                  onClick={() => handleManageHospital(hospital)}
                 >
                   Manage Hospital
                 </button>
@@ -452,6 +628,53 @@ function Hospitals() {
           </article>
         ))}
       </section>
+
+      {selectedHospitalCard ? (
+        <section className="panel hospitals-detail">
+          <div className="panel-header">
+            <div>
+              <h3>{selectedHospitalCard.name}</h3>
+              <p className="panel-subtitle">{selectedHospitalCard.location}</p>
+            </div>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => {
+                setSelectedHospitalCard(null)
+                notifyAction('Hospital details closed')
+              }}
+            >
+              Close Details
+            </button>
+          </div>
+          <div className="hospitals-detail-grid">
+            <div>
+              <span>Specialty</span>
+              <strong>{selectedHospitalCard.specialty}</strong>
+            </div>
+            <div>
+              <span>District</span>
+              <strong>{selectedHospitalCard.district}</strong>
+            </div>
+            <div>
+              <span>Total Patients</span>
+              <strong>{selectedHospitalCard.patients}</strong>
+            </div>
+            <div>
+              <span>Total Doctors</span>
+              <strong>{selectedHospitalCard.doctors}</strong>
+            </div>
+            <div>
+              <span>Total Rooms</span>
+              <strong>{selectedHospitalCard.rooms}</strong>
+            </div>
+            <div>
+              <span>Occupancy</span>
+              <strong>{selectedHospitalCard.occupancy}%</strong>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="hospitals-summary">
         <div className="panel">
@@ -529,7 +752,7 @@ function Hospitals() {
             <button
               className="ghost-button"
               type="button"
-              onClick={() => pushAction('Viewing doctor analytics')}
+              onClick={handleViewDoctorAnalytics}
             >
               View Analytics
             </button>
