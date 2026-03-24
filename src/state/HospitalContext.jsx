@@ -187,6 +187,7 @@ function HospitalProvider({ children }) {
   // Rotate doctor statuses every 3 hours
   useEffect(() => {
     const statusRotation = ['On Duty', 'On Call', 'Off Shift']
+    const objectIdPattern = /^[a-f\d]{24}$/i
     
     const rotateStatuses = () => {
       setDoctors((current) =>
@@ -194,13 +195,18 @@ function HospitalProvider({ children }) {
           const currentIndex = statusRotation.indexOf(doctor.status)
           const nextIndex = (currentIndex + 1) % statusRotation.length
           const newStatus = statusRotation[nextIndex]
-          
-          // Update in MongoDB
-          fetch(`/api/doctors/${doctor._id || doctor.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus }),
-          }).catch((err) => console.warn(`⚠️ Could not update ${doctor.name} status:`, err.message))
+
+          // Only sync doctors that came from MongoDB; local seeded doctors have numeric ids.
+          const mongoId = typeof doctor._id === 'string' && objectIdPattern.test(doctor._id)
+            ? doctor._id
+            : null
+          if (mongoId) {
+            fetch(`/api/doctors/${mongoId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: newStatus }),
+            }).catch((err) => console.warn(`⚠️ Could not update ${doctor.name} status:`, err.message))
+          }
           
           return { ...doctor, status: newStatus }
         })
@@ -348,7 +354,7 @@ function HospitalProvider({ children }) {
   }
 
   const addNotification = (message, type = 'error') => {
-    const id = Date.now()
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setNotifications((current) => [...current, { id, message, type }])
     setTimeout(() => {
       setNotifications((current) => current.filter((n) => n.id !== id))
