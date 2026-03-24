@@ -78,54 +78,6 @@ const quickActions = [
   'Dismiss Alert',
 ]
 
-const andhraPradeshBounds = {
-  minLat: 12.6,
-  maxLat: 19.3,
-  minLng: 76.7,
-  maxLng: 84.9,
-}
-
-const randomBetween = (min, max) => min + Math.random() * (max - min)
-
-const clampToAndhraPradesh = ({ lat, lng }) => ({
-  lat: Math.min(andhraPradeshBounds.maxLat, Math.max(andhraPradeshBounds.minLat, lat)),
-  lng: Math.min(andhraPradeshBounds.maxLng, Math.max(andhraPradeshBounds.minLng, lng)),
-})
-
-const liveRouteAnchors = Object.entries(hospitalLocations).map(([name, coords]) => ({
-  name,
-  lat: coords.lat,
-  lng: coords.lng,
-  district: coords.district,
-}))
-
-const pickNextTarget = (currentLocation, district) => {
-  const districtAnchors = liveRouteAnchors.filter((anchor) => anchor.district === district)
-  const candidates = districtAnchors.length > 0 ? districtAnchors : liveRouteAnchors
-  const nearest = [...candidates].sort((a, b) => {
-    const da = Math.abs(a.lat - currentLocation.lat) + Math.abs(a.lng - currentLocation.lng)
-    const db = Math.abs(b.lat - currentLocation.lat) + Math.abs(b.lng - currentLocation.lng)
-    return da - db
-  })
-
-  // Skip the closest anchor to avoid tiny back-and-forth moves.
-  const destinationAnchor = nearest[Math.min(nearest.length - 1, 1 + Math.floor(Math.random() * Math.min(3, nearest.length)))]
-  return clampToAndhraPradesh({
-    lat: destinationAnchor.lat + randomBetween(-0.06, 0.06),
-    lng: destinationAnchor.lng + randomBetween(-0.08, 0.08),
-  })
-}
-
-const getAmbulanceVisualOffset = (ambulanceId) => {
-  const sum = ambulanceId.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
-  const angle = (sum % 360) * (Math.PI / 180)
-  const radius = 0.012 // ~1.3 km visual separation to avoid overlap with hospital icons
-  return {
-    lat: Math.sin(angle) * radius,
-    lng: Math.cos(angle) * radius,
-  }
-}
-
 // 5 Ambulances with different locations
 const ambulanceFleet = [
   {
@@ -241,7 +193,42 @@ function Emergency() {
   const [showERDialog, setShowERDialog] = useState(false)
   const [showPatientDialog, setShowPatientDialog] = useState(false)
 
-  const { addNotification } = useContext(HospitalContext)
+  const { addNotification, patients, rooms: roomInventory } = useContext(HospitalContext)
+
+  const hospitalRoomAvailability = useMemo(() => {
+    const roomCountByHospital = new Map()
+    const occupiedByHospital = new Map()
+
+    roomInventory.forEach((room) => {
+      const hospitalName = room?.hospital
+      if (!hospitalName) {
+        return
+      }
+      roomCountByHospital.set(hospitalName, (roomCountByHospital.get(hospitalName) || 0) + 1)
+    })
+
+    patients.forEach((patient) => {
+      const hospitalName = patient?.hospital
+      const hasAssignedRoom = patient?.room && patient.room !== 'Unassigned'
+      if (!hospitalName || !hasAssignedRoom) {
+        return
+      }
+      occupiedByHospital.set(hospitalName, (occupiedByHospital.get(hospitalName) || 0) + 1)
+    })
+
+    const availability = {}
+    Object.keys(hospitalLocations).forEach((hospitalName) => {
+      const totalRooms = roomCountByHospital.get(hospitalName)
+      if (Number.isFinite(totalRooms) && totalRooms > 0) {
+        const occupiedRooms = occupiedByHospital.get(hospitalName) || 0
+        availability[hospitalName] = Math.max(totalRooms - occupiedRooms, 0)
+      } else {
+        availability[hospitalName] = hospitalLocations[hospitalName]?.beds || 0
+      }
+    })
+
+    return availability
+  }, [patients, roomInventory])
 
   const pushAction = (message) => {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
@@ -417,10 +404,6 @@ function Emergency() {
             coords.district === ambulanceDistrict
           )
 
-      if (relevantHospitals.length === 0) {
-        throw new Error(`No hospitals found for district ${ambulanceDistrict}`)
-      }
-
       // Calculate distances and create optimization data
       const hospitalsWithDistance = relevantHospitals.map(([name, coords]) => ({
         name,
@@ -431,24 +414,37 @@ function Emergency() {
         ),
         beds: coords.beds,
         doctors: coords.doctors,
-      })).sort((a, b) => a.distance - b.distance)
+        availableRooms: hospitalRoomAvailability[name] ?? coords.beds,
+      })).map((hospital) => {
+        const availabilityPenalty = hospital.availableRooms > 0 ? 1 / hospital.availableRooms : 10
+        const doctorPenalty = 1 / Math.max(hospital.doctors, 1)
+        const score = hospital.distance * severityWeight + availabilityPenalty * 3 + doctorPenalty
+        return {
+          ...hospital,
+          score,
+        }
+      }).sort((a, b) => a.score - b.score)
+
+      const hospitalsWithCapacity = hospitalsWithDistance.filter((item) => item.availableRooms > 0)
+      const candidateHospitals = hospitalsWithCapacity.length ? hospitalsWithCapacity : hospitalsWithDistance
 
       // Prepare QAOA request for top 5 nearest hospitals
-      const topHospitals = hospitalsWithDistance.slice(0, Math.min(5, hospitalsWithDistance.length))
+      const topHospitals = candidateHospitals.slice(0, Math.min(5, candidateHospitals.length))
       
       const patients = [{
-        id: currentEmergency.caseId,
-        priority: currentEmergency.severity === 'Critical' ? 1.5 : 1.0
+        id: selectedEmergency.caseId,
+        priority: selectedEmergency.severity === 'Critical' ? 1.5 : 1.0
       }]
 
       const rooms = topHospitals.map(h => h.name)
+      const costMatrix = [topHospitals.map((h) => Number(h.score.toFixed(4)))]
 
       console.log('QAOA Hospital Assignment Request:', { patients, rooms, topHospitals })
 
       const response = await fetch('/api/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patients, rooms })
+        body: JSON.stringify({ patients, rooms, costMatrix })
       })
 
       if (!response.ok) {
@@ -480,7 +476,7 @@ function Emergency() {
         assignedHospital: {
           name: assignedHospitalName,
           distance: assignedData.distance,
-          beds: assignedData.beds,
+          beds: assignedData.availableRooms,
           doctors: assignedData.doctors,
           district: assignedData.coords.district,
         },
@@ -510,12 +506,7 @@ function Emergency() {
       setSelectedHospital(assignedHospitalName)
       
       addNotification(`✓ Hospital assigned: ${assignedHospitalName} (${assignedData.distance.toFixed(1)} km)`, 'success')
-      if (dispatch) {
-        addNotification(`🚑 ${dispatch.ambulanceId} dispatched to ${assignedHospitalName} (ETA ${dispatch.eta})`, 'success')
-        pushAction(`Assigned ${assignedHospitalName}; redirected nearest ambulance ${dispatch.ambulanceId} (ETA ${dispatch.eta})`)
-      } else {
-        pushAction(`Assigned ${assignedHospitalName} - ${assignedData.distance.toFixed(1)}km away, ${assignedData.beds} beds, ${assignedData.doctors} doctors`)
-      }
+      pushAction(`Assigned ${assignedHospitalName} - ${assignedData.distance.toFixed(1)}km away, ${assignedData.beds} beds, ${assignedData.doctors} doctors`)
 
     } catch (error) {
       console.error('Hospital assignment error:', error)
@@ -591,8 +582,37 @@ function Emergency() {
     addNotification('Sending emergency alert to nearby hospitals...', 'info')
 
     try {
-      // Simulate alert sending to hospitals
       setTimeout(async () => {
+        const notifyPayload = {
+          caseDetails: selectedEmergency,
+          assignedHospital: {
+            name: assignedHospital.name,
+            distance: assignedHospital.distance,
+            district: assignedHospital.coords?.district || assignedHospital.district,
+            availableRooms: assignedHospital.availableRooms || assignedHospital.beds,
+            doctors: assignedHospital.doctors,
+          },
+          recipients: {
+            email: DEFAULT_ALERT_EMAIL,
+            phone: DEFAULT_ALERT_PHONE,
+          },
+        }
+
+        let notifyResponsePayload = null
+        try {
+          const notifyResponse = await fetch('/api/emergency/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notifyPayload),
+          })
+          notifyResponsePayload = await notifyResponse.json().catch(() => null)
+          if (!notifyResponse.ok) {
+            throw new Error(notifyResponsePayload?.error || 'Emergency alert API failed')
+          }
+        } catch (notifyError) {
+          console.warn('⚠️ Notification provider issue:', notifyError.message)
+        }
+
         // Update MongoDB with alert status
         try {
           // First, try to find the existing case
@@ -617,9 +637,9 @@ function Emergency() {
             assignedHospital: {
               name: assignedHospital.name,
               distance: assignedHospital.distance,
-              beds: assignedHospital.beds,
+              beds: assignedHospital.availableRooms || assignedHospital.beds,
               doctors: assignedHospital.doctors,
-              district: assignedHospital.coords.district,
+              district: assignedHospital.coords?.district || assignedHospital.district,
             },
             status: 'In Transit'
           }
@@ -651,12 +671,62 @@ function Emergency() {
           console.warn('⚠️ Could not update MongoDB:', mongoError.message)
         }
 
-        addNotification(`✓ Emergency alert sent to ${assignedHospital.name}`, 'success')
-        pushAction(`✓ Alert sent to ${assignedHospital.name} • ${selectedEmergency.patientName} • ${selectedEmergency.incident}`)
+        const channelSummary = notifyResponsePayload?.channels
+          ? `email:${notifyResponsePayload.channels.email?.sent ? 'ok' : 'skip'}, voice:${notifyResponsePayload.channels.voice?.sent ? 'ok' : 'skip'}, sms:${notifyResponsePayload.channels.sms?.sent ? 'ok' : 'skip'}`
+          : 'email/voice/sms status unavailable'
+
+        addNotification(`✓ Emergency alert sent to ${assignedHospital.name} (${channelSummary})`, 'success')
+        pushAction(`✓ Alert sent to ${assignedHospital.name} • ${selectedEmergency.patientName} • ${selectedEmergency.incident} • ${channelSummary}`)
       }, 1000)
     } catch (error) {
       addNotification(`Failed to send alert: ${error.message}`, 'error')
       pushAction(`Error sending alert: ${error.message}`)
+    }
+  }
+
+  const handleEmergencyVoiceCall = async () => {
+    if (!selectedEmergency) {
+      addNotification('Select an emergency case before placing a voice call', 'warning')
+      return
+    }
+
+    if (!assignedHospital) {
+      addNotification('Assign hospital first, then trigger emergency voice call', 'warning')
+      return
+    }
+
+    pushAction(`📞 Triggering emergency voice call for ${selectedEmergency.caseId}`)
+    addNotification(`Placing emergency voice call to ${DEFAULT_ALERT_PHONE}...`, 'info')
+
+    try {
+      const payload = {
+        phone: DEFAULT_ALERT_PHONE,
+        caseDetails: selectedEmergency,
+        assignedHospital: {
+          name: assignedHospital.name,
+          distance: assignedHospital.distance,
+          availableRooms: assignedHospital.availableRooms || assignedHospital.beds,
+          doctors: assignedHospital.doctors,
+          district: assignedHospital.coords?.district || assignedHospital.district,
+        },
+      }
+
+      const response = await fetch('/api/emergency/voice-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.reason || data.message || 'Voice call could not be started')
+      }
+
+      addNotification(`✓ Emergency voice call started (${DEFAULT_ALERT_PHONE})`, 'success')
+      pushAction(`✓ Voice call started for ${selectedEmergency.caseId} • SID: ${data.callSid || 'n/a'}`)
+    } catch (error) {
+      addNotification(`Voice call failed: ${error.message}`, 'error')
+      pushAction(`❌ Voice call failed: ${error.message}`)
     }
   }
 
@@ -1292,7 +1362,7 @@ function Emergency() {
               <span style={{ color: '#d97706', fontWeight: 'bold' }}>Severity: {selectedEmergency.severity}</span>
               {assignedHospital && (
                 <span style={{ color: '#10b981', fontWeight: 'bold' }}>
-                  ✓ Assigned: {assignedHospital.name}
+                    ✓ Assigned: {assignedHospital.name} ({assignedHospital.availableRooms || assignedHospital.beds} rooms free)
                 </span>
               )}
             </div>
@@ -1589,6 +1659,15 @@ function Emergency() {
                   style={{ width: '100%' }}
                 >
                   {assignedHospital ? '📤 Send Alert' : '⚠️ Assign Hospital First'}
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={handleEmergencyVoiceCall}
+                  disabled={!assignedHospital}
+                  style={{ width: '100%' }}
+                >
+                  {assignedHospital ? `📞 Emergency Voice Call (${DEFAULT_ALERT_PHONE})` : '⚠️ Assign Hospital First'}
                 </button>
                 <button
                   className="ghost-button"
