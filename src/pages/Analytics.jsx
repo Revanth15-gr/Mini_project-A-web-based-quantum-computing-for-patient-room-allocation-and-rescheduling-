@@ -78,6 +78,57 @@ const quickActions = [
   'Dismiss Alert',
 ]
 
+const andhraPradeshBounds = {
+  minLat: 12.6,
+  maxLat: 19.3,
+  minLng: 76.7,
+  maxLng: 84.9,
+}
+
+const randomBetween = (min, max) => min + Math.random() * (max - min)
+
+const clampToAndhraPradesh = ({ lat, lng }) => ({
+  lat: Math.min(andhraPradeshBounds.maxLat, Math.max(andhraPradeshBounds.minLat, lat)),
+  lng: Math.min(andhraPradeshBounds.maxLng, Math.max(andhraPradeshBounds.minLng, lng)),
+})
+
+const pickNextTarget = (currentLocation, district) => {
+  const anchors = Object.values(hospitalLocations).filter((location) =>
+    district ? location.district === district : true,
+  )
+  const pool = anchors.length > 0 ? anchors : Object.values(hospitalLocations)
+
+  if (pool.length === 0) {
+    return clampToAndhraPradesh(currentLocation)
+  }
+
+  const nearest = [...pool].sort((a, b) => {
+    const da = Math.abs(a.lat - currentLocation.lat) + Math.abs(a.lng - currentLocation.lng)
+    const db = Math.abs(b.lat - currentLocation.lat) + Math.abs(b.lng - currentLocation.lng)
+    return da - db
+  })
+
+  const candidateIndex = Math.min(nearest.length - 1, 1 + Math.floor(Math.random() * Math.min(3, nearest.length)))
+  const destination = nearest[candidateIndex] || nearest[0]
+
+  return clampToAndhraPradesh({
+    lat: destination.lat + randomBetween(-0.06, 0.06),
+    lng: destination.lng + randomBetween(-0.08, 0.08),
+  })
+}
+
+const getAmbulanceVisualOffset = (ambulanceId) => {
+  const sum = String(ambulanceId)
+    .split('')
+    .reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  const angle = (sum % 360) * (Math.PI / 180)
+  const radius = 0.012
+  return {
+    lat: Math.sin(angle) * radius,
+    lng: Math.cos(angle) * radius,
+  }
+}
+
 // 5 Ambulances with different locations
 const ambulanceFleet = [
   {
