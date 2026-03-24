@@ -41,6 +41,7 @@ def solve_classical(cost_matrix: List[List[float]], patients: List[Patient], roo
         best_room_index = None
         best_cost = None
 
+        # Find best room from remaining available rooms
         for j in available_rooms:
             candidate_cost = cost_matrix[i][j]
             if best_cost is None or candidate_cost < best_cost:
@@ -48,6 +49,7 @@ def solve_classical(cost_matrix: List[List[float]], patients: List[Patient], roo
                 best_room_index = j
 
         if best_room_index is None:
+            # No available rooms left, assign None
             assignments.append({
                 "patient": patient.label or patient.id,
                 "patientId": patient.id,
@@ -56,11 +58,13 @@ def solve_classical(cost_matrix: List[List[float]], patients: List[Patient], roo
             })
             continue
 
+        # Assign best room and mark as unavailable for future patients
+        room_name = rooms[best_room_index]
         assignments.append({
             "patient": patient.label or patient.id,
             "patientId": patient.id,
             "patientName": patient.label or patient.id,
-            "room": rooms[best_room_index],
+            "room": room_name,
         })
         total_cost += float(best_cost)
         available_rooms.remove(best_room_index)
@@ -119,12 +123,18 @@ def solve_qaoa(cost_matrix: List[List[float]], patients: List[Patient], rooms: L
     solution = {name: int(round(val)) for name, val in zip(var_names, result.x)}
 
     assignments = []
+    assigned_room_indices = set()
+    
     for i, patient in enumerate(patients):
         assigned_room = None
         for j, room in enumerate(rooms):
             if solution.get(f"x_{i}_{j}") == 1:
-                assigned_room = room
+                # Ensure this room hasn't been assigned to another patient
+                if j not in assigned_room_indices:
+                    assigned_room = room
+                    assigned_room_indices.add(j)
                 break
+        
         assignments.append({
             "patient": patient.label or patient.id,
             "patientId": patient.id,

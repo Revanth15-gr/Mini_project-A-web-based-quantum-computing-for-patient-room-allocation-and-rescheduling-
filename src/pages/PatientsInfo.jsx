@@ -335,17 +335,20 @@ function PatientsInfo() {
       // Update each patient with their new room assignment
       for (const assignment of optimizationResult.assignments) {
         try {
-          // Find the patient by name
-          const patient = patients.find((item, index) => getPatientKey(item, index) === assignment.patientId)
+          // Find the patient by name, hospital, ensure matching the selected hospital only
+          const patientName = assignment.patientName || assignment.patient
+          const patient = patients.find(
+            (item) => item.hospital === selectedHospital && item.name.toLowerCase() === patientName.toLowerCase()
+          )
           
           if (!patient) {
-            console.warn(`Patient not found: ${assignment.patientName || assignment.patient}`)
+            console.warn(`Patient not found: ${patientName}`)
             errorCount++
             continue
           }
 
           if (!assignment.room) {
-            console.warn(`No room assigned for: ${assignment.patientName || assignment.patient}`)
+            console.warn(`No room assigned for: ${patientName}`)
             errorCount++
             continue
           }
