@@ -83,7 +83,7 @@ const insights = [
   { label: 'Conflicts Resolved', value: '21', delta: '-8%' },
 ]
 
-const changes = [
+const fallbackChanges = [
   { name: 'Sarah Lee', from: 'Room 104', to: 'Room 101' },
   { name: 'William Brown', from: 'Room 105', to: 'Room 103' },
   { name: 'John Miller', from: 'Room 102', to: 'Room 103' },
@@ -122,6 +122,24 @@ function pushAction(message) {
   window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
 }
 
+function readLatestReport() {
+  try {
+    return JSON.parse(localStorage.getItem(REPORT_STORAGE_KEY) || 'null')
+  } catch {
+    return null
+  }
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+}
+
+function getAssignmentPatientName(item) {
+  return item?.patientName || item?.patient || item?.label || item?.name || ''
+}
+
 function Dashboard() {
   const { patients, rooms: roomInventory, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
   const [optimizing, setOptimizing] = useState(false)
@@ -130,6 +148,8 @@ function Dashboard() {
   const [qaoaError, setQaoaError] = useState('')
   const [optimizationLatencyMs, setOptimizationLatencyMs] = useState(1200)
   const [runHistory, setRunHistory] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [latestReport, setLatestReport] = useState(() => readLatestReport())
 
   const qaoaPatients = useMemo(
     () =>
@@ -152,6 +172,26 @@ function Dashboard() {
       }
     } catch {
       setRunHistory([])
+    }
+  }, [])
+
+  useEffect(() => {
+    const syncReport = () => {
+      setLatestReport(readLatestReport())
+    }
+
+    const onStorage = (event) => {
+      if (event.key === REPORT_STORAGE_KEY) {
+        syncReport()
+      }
+    }
+
+    const timer = setInterval(syncReport, 2500)
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('storage', onStorage)
     }
   }, [])
 
@@ -214,6 +254,116 @@ function Dashboard() {
     const assignedCount = qaoaResult.assignments.filter((item) => item.room).length
     return Number((assignedCount / Math.max(optimizationLatencyMs / 1000, 0.001)).toFixed(1))
   }, [optimizationLatencyMs, qaoaResult])
+
+  const schedulerRows = useMemo(
+    () =>
+      hospitalRooms.map((roomInfo) => ({
+        roomInfo,
+        patient: currentRoomAssignments[roomInfo.name] || null,
+      })),
+    [currentRoomAssignments, hospitalRooms]
+  )
+
+  const latestAssignments = useMemo(() => {
+    if (qaoaResult?.assignments?.length) {
+      return qaoaResult.assignments
+    }
+    if (
+      latestReport?.selectedHospital === selectedHospital &&
+      Array.isArray(latestReport?.assignments) &&
+      latestReport.assignments.length
+    ) {
+      return latestReport.assignments
+    }
+    return []
+  }, [latestReport, qaoaResult, selectedHospital])
+
+  const roomAssignmentChanges = useMemo(() => {
+    if (!latestAssignments.length) {
+      return fallbackChanges
+    }
+
+    const currentPatientMap = new Map(
+      patients
+        .filter((p) => p.hospital === selectedHospital)
+        .map((p) => [normalizeName(p.name), p])
+    )
+
+    const changesFromLatestRun = latestAssignments
+      .map((item) => {
+        const name = getAssignmentPatientName(item)
+        const targetRoom = item?.room || null
+        const existingPatient = currentPatientMap.get(normalizeName(name))
+
+        if (!existingPatient || !targetRoom) {
+          return null
+        }
+
+        const currentRoom = existingPatient.room || 'Unassigned'
+        if (currentRoom === targetRoom) {
+          return null
+        }
+
+        return {
+          name: existingPatient.name || name,
+          from: currentRoom,
+          to: targetRoom,
+        }
+      })
+      .filter(Boolean)
+
+    if (!changesFromLatestRun.length) {
+      return []
+    }
+
+    const dedupe = new Map()
+    changesFromLatestRun.forEach((item) => {
+      const key = `${normalizeName(item.name)}-${item.from}-${item.to}`
+      if (!dedupe.has(key)) {
+        dedupe.set(key, item)
+      }
+    })
+
+    return Array.from(dedupe.values())
+  }, [latestAssignments, patients, selectedHospital])
+
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+
+  const filteredSchedulerRows = useMemo(() => {
+    if (!normalizedSearch) {
+      return schedulerRows
+    }
+
+    return schedulerRows.filter(({ roomInfo, patient }) => {
+      const haystack = [
+        roomInfo?.name,
+        patient?.name,
+        patient?.status,
+        patient?.care,
+        patient?.next,
+        roomInfo?.equipment,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return haystack.includes(normalizedSearch)
+    })
+  }, [normalizedSearch, schedulerRows])
+
+  const filteredChanges = useMemo(() => {
+    if (!normalizedSearch) {
+      return roomAssignmentChanges
+    }
+
+    return roomAssignmentChanges.filter((change) =>
+      [change.name, change.from, change.to]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearch)
+    )
+  }, [normalizedSearch, roomAssignmentChanges])
 
   const metrics = useMemo(
     () => [
@@ -521,12 +671,23 @@ function Dashboard() {
                 type="search"
                 placeholder="Search"
                 aria-label="Search"
-                onChange={(e) =>
-                  e.target.value && pushAction(`Searching: ${e.target.value}`)
-                }
+                value={searchQuery}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setSearchQuery(value)
+                  if (value) {
+                    pushAction(`Searching details for: ${value}`)
+                  }
+                }}
               />
             </div>
           </div>
+
+          {normalizedSearch && (
+            <p className="panel-subtitle" style={{ margin: '0.75rem 0 0' }}>
+              Search "{searchQuery}" matched {filteredSchedulerRows.length} schedule rows and {filteredChanges.length} reallocation changes.
+            </p>
+          )}
 
           {activeTab === 'scheduler' && (
             <div className="scheduler">
@@ -538,8 +699,7 @@ function Dashboard() {
                 <div className="scheduler-cell">Next Appointment</div>
                 <div className="scheduler-cell">Equipment</div>
               </div>
-              {hospitalRooms.map((roomInfo) => {
-                const patient = currentRoomAssignments[roomInfo.name]
+              {filteredSchedulerRows.map(({ roomInfo, patient }) => {
                 return (
                   <div key={`${roomInfo.hospital}-${roomInfo.name}`} className="scheduler-row">
                     <div className="scheduler-cell time-cell">{roomInfo.name}</div>
@@ -573,6 +733,14 @@ function Dashboard() {
                   </div>
                 )
               })}
+              {!filteredSchedulerRows.length && (
+                <div className="scheduler-row">
+                  <div className="scheduler-cell time-cell">-</div>
+                  <div className="scheduler-cell" style={{ gridColumn: 'span 5', color: '#5c6a85' }}>
+                    No schedule details found for "{searchQuery}".
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {activeTab === 'constraints' && (
@@ -693,7 +861,10 @@ function Dashboard() {
           <div className="panel-header">
             <div>
               <h3>Room Assignment Changes</h3>
-              <p className="panel-subtitle">Latest quantum reallocation</p>
+              <p className="panel-subtitle">
+                Latest quantum reallocation
+                {latestReport?.generatedAt ? ` | Updated ${new Date(latestReport.generatedAt).toLocaleTimeString()}` : ''}
+              </p>
             </div>
             <button
               className="ghost-button"
@@ -704,9 +875,9 @@ function Dashboard() {
             </button>
           </div>
           <div className="change-list">
-            {changes.map((change) => (
+            {filteredChanges.map((change, index) => (
               <div
-                key={change.name}
+                key={`${change.name}-${change.from}-${change.to}-${index}`}
                 className="change-item"
                 onClick={() =>
                   pushAction(
@@ -725,6 +896,19 @@ function Dashboard() {
                 <span className="change-arrow" aria-hidden="true" />
               </div>
             ))}
+            {!filteredChanges.length && (
+              <div className="change-item" style={{ cursor: 'default' }}>
+                <div className="change-avatar" aria-hidden="true" />
+                <div>
+                  <p className="change-name">No matching reallocation details</p>
+                  <p className="change-note">
+                    {normalizedSearch
+                      ? `Nothing found for "${searchQuery}"`
+                      : 'Run/reschedule with QAOA to generate latest room changes.'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </aside>

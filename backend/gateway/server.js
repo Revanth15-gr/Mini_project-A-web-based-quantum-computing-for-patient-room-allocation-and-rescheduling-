@@ -4,6 +4,9 @@ import cors from 'cors'
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
 import path from 'path'
+import crypto from 'crypto'
+import nodemailer from 'nodemailer'
+import twilio from 'twilio'
 import { fileURLToPath } from 'url'
 import { Hospital } from './models/Hospital.js'
 import { Room } from './models/Room.js'
@@ -20,6 +23,8 @@ const app = express()
 const PORT = process.env.PORT || 4000
 const QAOA_URL = process.env.QAOA_SERVICE_URL || 'http://127.0.0.1:8000'
 const MONGODB_URI = process.env.MONGODB_URI
+const DEFAULT_ALERT_EMAIL = process.env.EMERGENCY_ALERT_EMAIL || 'gudalarevanth15@gmail.com'
+const DEFAULT_ALERT_PHONE = process.env.EMERGENCY_ALERT_PHONE || '+919392759970'
 
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
@@ -111,6 +116,204 @@ const buildFallbackOptimization = (payload = {}) => {
     solver: 'gateway-fallback',
     message: 'Used fallback optimizer because QAOA service was unavailable or failed.',
   }
+}
+
+const escapeXml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+
+const getMailTransporter = () => {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return null
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  })
+}
+
+const sendEmergencyEmail = async ({ to, subject, text, html }) => {
+  const transporter = getMailTransporter()
+  if (!transporter) {
+    return { sent: false, reason: 'SMTP not configured' }
+  }
+
+  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER
+  const info = await transporter.sendMail({
+    from: fromAddress,
+    to,
+    subject,
+    text,
+    html: html || text,
+  })
+
+  return { sent: true, messageId: info.messageId }
+}
+
+const getTwilioClient = () => {
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    return null
+  }
+  return twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+}
+
+const sendEmergencyVoiceCall = async ({ to, message }) => {
+  const client = getTwilioClient()
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER
+
+  if (!client || !fromNumber) {
+    return { sent: false, reason: 'Twilio voice not configured' }
+  }
+
+  const twiml = `<Response><Say voice="alice">${escapeXml(message)}</Say></Response>`
+  const call = await client.calls.create({
+    twiml,
+    to,
+    from: fromNumber,
+  })
+
+  return { sent: true, sid: call.sid }
+}
+
+const sendEmergencySms = async ({ to, message }) => {
+  const client = getTwilioClient()
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER
+
+  if (!client || !fromNumber) {
+    return { sent: false, reason: 'Twilio SMS not configured' }
+  }
+
+  const sms = await client.messages.create({
+    to,
+    from: fromNumber,
+    body: message,
+  })
+
+  return { sent: true, sid: sms.sid }
+}
+
+const buildEmergencyEmailMessage = ({ caseDetails = {}, assignedHospital = {} }) => {
+  const caseId = caseDetails.caseId || 'Unknown Case'
+  const patientName = caseDetails.patientName || 'Unknown Patient'
+  const severity = caseDetails.severity || 'Unknown Severity'
+  const incident = caseDetails.incident || 'Emergency incident'
+  const location = caseDetails.location || 'Unknown Location'
+  const eta = caseDetails.eta || 'N/A'
+  const hospitalName = assignedHospital.name || 'Nearest available hospital'
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #d32f2f; color: white; padding: 30px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
+        .emergency-title { font-size: 32px; font-weight: bold; margin: 10px 0; }
+        .content { background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #d32f2f; }
+        .info-block { margin: 15px 0; }
+        .info-label { font-weight: bold; color: #d32f2f; display: inline-block; width: 120px; }
+        .info-value { display: inline-block; }
+        .action { background-color: #4CAF50; color: white; padding: 15px 20px; border-radius: 5px; text-align: center; font-weight: bold; margin-top: 20px; font-size: 16px; }
+        .action-steps { margin-top: 14px; background: #fff3cd; border: 1px solid #ffe08a; border-radius: 6px; padding: 12px 14px; }
+        .action-steps-title { font-weight: bold; color: #b54708; margin-bottom: 6px; }
+        .action-steps ul { margin: 6px 0 0 18px; padding: 0; }
+        .action-steps li { margin: 4px 0; }
+        .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; }
+        .priority-critical { color: #d32f2f; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div style="font-size: 24px;">🚨 EMERGENCY ALERT 🚨</div>
+          <div class="emergency-title">${caseId}</div>
+        </div>
+        
+        <div class="content">
+          <div class="info-block">
+            <span class="info-label">Patient ID:</span>
+            <span class="info-value">${patientName}</span>
+          </div>
+          
+          <div class="info-block">
+            <span class="info-label">Priority:</span>
+            <span class="info-value priority-critical">${severity}</span>
+          </div>
+          
+          <div class="info-block">
+            <span class="info-label">Location:</span>
+            <span class="info-value">${location}</span>
+          </div>
+          
+          <div class="info-block">
+            <span class="info-label">Incident Type:</span>
+            <span class="info-value">${incident}</span>
+          </div>
+          
+          <div class="info-block">
+            <span class="info-label">Assigned Hospital:</span>
+            <span class="info-value">${hospitalName}</span>
+          </div>
+          
+          <div class="info-block">
+            <span class="info-label">ETA:</span>
+            <span class="info-value">${eta}</span>
+          </div>
+          
+          <div class="action">⚠️ PLEASE PREPARE IMMEDIATELY AND TAKE ACTION NOW</div>
+          <div class="action-steps">
+            <div class="action-steps-title">Required Action:</div>
+            <ul>
+              <li>Activate ER trauma team now.</li>
+              <li>Reserve emergency bed and critical care equipment.</li>
+              <li>Confirm readiness to receive the patient immediately.</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div class="footer">
+          <p>This is an automated emergency alert from the Hospital Emergency Response System.</p>
+          <p>Please DO NOT reply to this email. Contact your hospital's emergency coordinator immediately.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+  
+  // Plain text version for email clients that don't support HTML
+  const textContent = `🚨 EMERGENCY ALERT 🚨\n\nCase: ${caseId}\nPatient ID: ${patientName}\nPriority: ${severity}\nLocation: ${location}\nIncident Type: ${incident}\nAssigned Hospital: ${hospitalName}\nETA: ${eta}\n\nPLEASE PREPARE IMMEDIATELY AND TAKE ACTION NOW\n\nRequired Action:\n1. Activate ER trauma team now.\n2. Reserve emergency bed and critical care equipment.\n3. Confirm readiness to receive the patient immediately.\n\nThis is an automated emergency alert from the Hospital Emergency Response System.`
+  
+  return { html: htmlContent, text: textContent }
+}
+
+const buildEmergencyVoiceMessage = ({ caseDetails = {}, assignedHospital = {} }) => {
+  const caseId = caseDetails.caseId || 'Unknown case'
+  const patientName = caseDetails.patientName || 'Unknown patient'
+  const severity = caseDetails.severity || 'Unknown severity'
+  const incident = caseDetails.incident || 'Emergency incident'
+  const eta = caseDetails.eta || 'unknown ETA'
+  const hospitalName = assignedHospital.name || 'nearest available hospital'
+  const distance = Number.isFinite(Number(assignedHospital.distance))
+    ? `${Number(assignedHospital.distance).toFixed(1)} kilometers`
+    : 'unknown distance'
+
+  return (
+    `Emergency accident case alert. Case ${caseId}. ` +
+    `Patient ${patientName}. Severity ${severity}. Incident: ${incident}. ` +
+    `Assigned hospital: ${hospitalName}, distance ${distance}. ` +
+    `Estimated arrival ${eta}. Emergency team get ready immediately.`
+  )
 }
 
 // MongoDB Connection (non-blocking)
@@ -518,6 +721,122 @@ app.delete('/api/emergency-cases/:id', async (req, res) => {
   }
 })
 
+app.post('/api/emergency/notify', async (req, res) => {
+  try {
+    const { caseDetails = {}, assignedHospital = {}, recipients = {} } = req.body || {}
+
+    const targetEmail = recipients.email || DEFAULT_ALERT_EMAIL
+    const targetPhone = String(recipients.phone || DEFAULT_ALERT_PHONE).replace(/\s+/g, '')
+
+    const caseId = caseDetails.caseId || 'Unknown Case'
+    const patientName = caseDetails.patientName || 'Unknown Patient'
+    const severity = caseDetails.severity || 'Unknown'
+    const incident = caseDetails.incident || 'Emergency incident'
+    const eta = caseDetails.eta || 'N/A'
+    const hospitalName = assignedHospital.name || 'Unassigned Hospital'
+    const distance = Number.isFinite(Number(assignedHospital.distance))
+      ? `${Number(assignedHospital.distance).toFixed(1)} km`
+      : 'N/A'
+    const availableRooms = assignedHospital.availableRooms ?? assignedHospital.beds ?? 'N/A'
+
+    const emailSubject = `🚨 Emergency Alert ${caseId}: ${patientName} assigned to ${hospitalName}`
+    const baseMessage =
+      `Emergency ${caseId}. Patient ${patientName}. Severity ${severity}. Incident: ${incident}. ` +
+      `Assigned Hospital: ${hospitalName}. Distance ${distance}. Available rooms ${availableRooms}. ETA ${eta}.`
+
+    const emailMessage = buildEmergencyEmailMessage({
+      caseDetails: { ...caseDetails, location: caseDetails.location || 'Emergency Location' },
+      assignedHospital,
+    })
+
+    const [emailStatus, voiceStatus, smsStatus] = await Promise.allSettled([
+      sendEmergencyEmail({
+        to: targetEmail,
+        subject: emailSubject,
+        text: emailMessage.text,
+        html: emailMessage.html,
+      }),
+      sendEmergencyVoiceCall({
+        to: targetPhone,
+        message: `${baseMessage} Emergency team get ready immediately.`,
+      }),
+      sendEmergencySms({
+        to: targetPhone,
+        message: `${baseMessage} Emergency team get ready.`,
+      }),
+    ])
+
+    const normalizeChannelStatus = (result) => {
+      if (result.status === 'fulfilled') {
+        return result.value
+      }
+      return { sent: false, reason: result.reason?.message || 'Channel failed' }
+    }
+
+    const channels = {
+      email: normalizeChannelStatus(emailStatus),
+      voice: normalizeChannelStatus(voiceStatus),
+      sms: normalizeChannelStatus(smsStatus),
+    }
+
+    const sentAny = Object.values(channels).some((channel) => channel.sent)
+
+    res.json({
+      success: sentAny,
+      message: sentAny
+        ? 'Emergency alert dispatched through configured channels'
+        : 'Alert prepared but no delivery channel is fully configured',
+      recipients: {
+        email: targetEmail,
+        phone: targetPhone,
+      },
+      channels,
+      preview: baseMessage,
+    })
+  } catch (error) {
+    console.error('❌ Emergency notify error:', error.message)
+    res.status(500).json({ error: error.message || 'Emergency notify failed' })
+  }
+})
+
+app.post('/api/emergency/voice-call', async (req, res) => {
+  try {
+    const { caseDetails = {}, assignedHospital = {}, phone } = req.body || {}
+    const targetPhone = String(phone || DEFAULT_ALERT_PHONE).replace(/\s+/g, '')
+    const voiceMessage = buildEmergencyVoiceMessage({ caseDetails, assignedHospital })
+
+    const voice = await sendEmergencyVoiceCall({
+      to: targetPhone,
+      message: voiceMessage,
+    })
+
+    if (!voice.sent) {
+      return res.status(400).json({
+        success: false,
+        message: 'Voice call not sent',
+        reason: voice.reason || 'Voice provider not configured',
+        phone: targetPhone,
+        preview: voiceMessage,
+      })
+    }
+
+    return res.json({
+      success: true,
+      message: 'Emergency voice call initiated',
+      phone: targetPhone,
+      callSid: voice.sid,
+      preview: voiceMessage,
+    })
+  } catch (error) {
+    console.error('❌ Emergency voice-call error:', error.message)
+    return res.status(500).json({
+      success: false,
+      message: 'Emergency voice call failed',
+      reason: error.message,
+    })
+  }
+})
+
 // ===== QUANTUM SECURE COMMUNICATION =====
 
 app.post('/api/secure/encode', async (req, res) => {
@@ -581,7 +900,6 @@ app.post('/api/secure/send-secure-data', async (req, res) => {
   } catch (error) {
     console.error('🔒 Secure transmission error:', error.message)
     // Fallback: generate mock transmission ID
-    const crypto = require('crypto')
     const transmissionId = crypto.randomBytes(8).toString('hex')
     res.json({
       success: true,
@@ -611,7 +929,6 @@ app.post('/api/secure/patient-data', async (req, res) => {
   } catch (error) {
     console.error('🔒 Secure patient data error:', error.message)
     // Fallback: mock response
-    const crypto = require('crypto')
     res.json({
       success: true,
       patient_id: req.body?.patientId,
@@ -667,6 +984,8 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/emergency-cases         - Get all emergency cases`)
   console.log(`   POST /api/emergency-cases         - Create emergency case`)
   console.log(`   PUT  /api/emergency-cases/:id     - Update emergency case`)
+  console.log(`   POST /api/emergency/notify        - Send emergency email/voice/sms alerts`)
+  console.log(`   POST /api/emergency/voice-call    - Trigger emergency voice call alert`)
   console.log(`   POST /api/optimize                - Run QAOA optimization`)
   console.log(`   POST /api/seed                    - Initialize database`)
   console.log(`\n🔒 Quantum Secure Communication:`)
