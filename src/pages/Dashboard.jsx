@@ -91,6 +91,7 @@ const fallbackChanges = [
 
 const REPORT_STORAGE_KEY = 'optimizationReportData'
 const RUN_HISTORY_KEY = 'optimizationRunHistory'
+const DASHBOARD_VIDEO_SRC = '/media/dashboard-interactive.mp4'
 
 function formatLatency(ms) {
   if (!Number.isFinite(ms) || ms <= 0) {
@@ -541,6 +542,21 @@ function Dashboard() {
             >
               Reschedule Patient
             </button>
+          </div>
+        </section>
+
+        <section className="panel interactive-video-panel">
+          <div className="video-frame">
+            <video
+              className="dashboard-video"
+              src={DASHBOARD_VIDEO_SRC}
+              preload="metadata"
+              autoPlay
+              loop
+              controls={false}
+              muted
+              playsInline
+            />
           </div>
         </section>
 

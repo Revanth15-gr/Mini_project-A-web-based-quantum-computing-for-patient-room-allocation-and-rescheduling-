@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
+import { HospitalContext } from '../state/HospitalContext.jsx'
 
 function Settings() {
   const [saved, setSaved] = useState(false)
+  const { systemSettings, updateSystemSetting } = useContext(HospitalContext)
+
+  const settingItems = [
+    { key: 'autoRescheduleConflicts', label: 'Auto-reschedule conflicts' },
+    { key: 'enableIsolationPriority', label: 'Enable isolation priority' },
+    { key: 'lockIcuRooms', label: 'Lock ICU rooms' },
+    { key: 'notifyCareTeams', label: 'Notify care teams' },
+  ]
 
   const pushAction = (message) => {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
@@ -11,6 +20,12 @@ function Settings() {
     setSaved(true)
     pushAction('Settings saved successfully')
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleToggleChange = (settingKey, settingLabel, checked) => {
+    updateSystemSetting(settingKey, checked)
+    setSaved(false)
+    pushAction(`${settingLabel} ${checked ? 'enabled' : 'disabled'}`)
   }
 
   return (
@@ -26,24 +41,17 @@ function Settings() {
           </button>
         </div>
         <div className="settings-grid">
-          {[
-            'Auto-reschedule conflicts',
-            'Enable isolation priority',
-            'Lock ICU rooms',
-            'Notify care teams',
-          ].map((setting) => (
-            <label key={setting} className="toggle">
+          {settingItems.map((setting) => (
+            <label key={setting.key} className="toggle">
               <input
                 type="checkbox"
-                defaultChecked
+                checked={Boolean(systemSettings?.[setting.key])}
                 onChange={(e) =>
-                  pushAction(
-                    `${setting} ${e.target.checked ? 'enabled' : 'disabled'}`
-                  )
+                  handleToggleChange(setting.key, setting.label, e.target.checked)
                 }
               />
               <span className="toggle-track" aria-hidden="true" />
-              <span>{setting}</span>
+              <span>{setting.label}</span>
             </label>
           ))}
         </div>

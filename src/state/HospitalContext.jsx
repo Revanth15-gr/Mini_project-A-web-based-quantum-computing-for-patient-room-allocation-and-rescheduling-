@@ -1,6 +1,34 @@
 import { createContext, useEffect, useMemo, useState } from 'react'
 
 const HospitalContext = createContext(null)
+const SYSTEM_SETTINGS_STORAGE_KEY = 'hospitalSystemSettings'
+const defaultSystemSettings = {
+  autoRescheduleConflicts: true,
+  enableIsolationPriority: true,
+  lockIcuRooms: true,
+  notifyCareTeams: true,
+}
+
+const normalizeSystemSettings = (rawSettings) => ({
+  autoRescheduleConflicts:
+    rawSettings?.autoRescheduleConflicts ?? defaultSystemSettings.autoRescheduleConflicts,
+  enableIsolationPriority:
+    rawSettings?.enableIsolationPriority ?? defaultSystemSettings.enableIsolationPriority,
+  lockIcuRooms: rawSettings?.lockIcuRooms ?? defaultSystemSettings.lockIcuRooms,
+  notifyCareTeams: rawSettings?.notifyCareTeams ?? defaultSystemSettings.notifyCareTeams,
+})
+
+const readStoredSystemSettings = () => {
+  try {
+    const raw = localStorage.getItem(SYSTEM_SETTINGS_STORAGE_KEY)
+    if (!raw) {
+      return defaultSystemSettings
+    }
+    return normalizeSystemSettings(JSON.parse(raw))
+  } catch {
+    return defaultSystemSettings
+  }
+}
 
 const hospitalNames = [
   'Vizag City Care Hospital',
@@ -146,6 +174,15 @@ function HospitalProvider({ children }) {
   const [doctors, setDoctors] = useState(doctorInventory)
   const [selectedHospital, setSelectedHospital] = useState('Vizag City Care Hospital')
   const [notifications, setNotifications] = useState([])
+  const [systemSettings, setSystemSettings] = useState(() => readStoredSystemSettings())
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SYSTEM_SETTINGS_STORAGE_KEY, JSON.stringify(systemSettings))
+    } catch {
+      // Ignore storage write errors and keep in-memory settings.
+    }
+  }, [systemSettings])
 
   const availableRooms = useMemo(() => {
     const occupied = new Set(patients.map((patient) => patient.room))
@@ -227,7 +264,25 @@ function HospitalProvider({ children }) {
       (room) => room.hospital === patient.hospital && !occupiedForHospital.has(room.name)
     )
     
-    const assignedRoom = availableForHospital[0]?.name || 'Unassigned'
+    const patientText = `${patient.status || ''} ${patient.care || ''}`.toLowerCase()
+    const isCriticalPatient = /critical|severe|trauma|emergency/.test(patientText)
+    const isIsolationRoom = (room) => room?.equipment?.toLowerCase().includes('isolation')
+    const isIcuRoom = (room) => room?.equipment?.toLowerCase().includes('icu')
+
+    let roomCandidates = availableForHospital
+    if (systemSettings.lockIcuRooms && !isCriticalPatient) {
+      const nonIcuRooms = roomCandidates.filter((room) => !isIcuRoom(room))
+      roomCandidates = nonIcuRooms.length ? nonIcuRooms : roomCandidates
+    }
+
+    let assignedRoom = roomCandidates[0]?.name || 'Unassigned'
+    if (systemSettings.enableIsolationPriority) {
+      const isolationRoom = roomCandidates.find((room) => isIsolationRoom(room))
+      if (isolationRoom) {
+        assignedRoom = isolationRoom.name
+      }
+    }
+
     const newPatient = { ...patient, room: assignedRoom }
     
     try {
@@ -392,6 +447,15 @@ function HospitalProvider({ children }) {
     }
   }
 
+  const updateSystemSetting = (settingKey, value) => {
+    setSystemSettings((current) =>
+      normalizeSystemSettings({
+        ...current,
+        [settingKey]: value,
+      })
+    )
+  }
+
 
 
   const value = {
@@ -407,6 +471,8 @@ function HospitalProvider({ children }) {
     addDoctor,
     notifications,
     addNotification,
+    systemSettings,
+    updateSystemSetting,
   }
 
   return <HospitalContext.Provider value={value}>{children}</HospitalContext.Provider>

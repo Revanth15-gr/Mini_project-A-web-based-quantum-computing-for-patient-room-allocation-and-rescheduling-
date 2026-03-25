@@ -203,98 +203,57 @@ const sendEmergencySms = async ({ to, message }) => {
 }
 
 const buildEmergencyEmailMessage = ({ caseDetails = {}, assignedHospital = {} }) => {
-  const caseId = caseDetails.caseId || 'Unknown Case'
-  const patientName = caseDetails.patientName || 'Unknown Patient'
-  const severity = caseDetails.severity || 'Unknown Severity'
-  const incident = caseDetails.incident || 'Emergency incident'
-  const location = caseDetails.location || 'Unknown Location'
-  const eta = caseDetails.eta || 'N/A'
-  const hospitalName = assignedHospital.name || 'Nearest available hospital'
+  const caseId = escapeXml(caseDetails.caseId || 'Unknown Case')
+  const patientName = escapeXml(caseDetails.patientName || 'Unknown Patient')
+  const severity = escapeXml(caseDetails.severity || 'Unknown')
+  const location = escapeXml(caseDetails.location || 'Unknown Location')
+  const incident = escapeXml(caseDetails.incident || 'Emergency incident')
+  const eta = escapeXml(caseDetails.eta || 'N/A')
+  const hospitalName = escapeXml(assignedHospital.name || 'Unassigned Hospital')
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background-color: #d32f2f; color: white; padding: 30px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
-        .emergency-title { font-size: 32px; font-weight: bold; margin: 10px 0; }
-        .content { background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #d32f2f; }
-        .info-block { margin: 15px 0; }
-        .info-label { font-weight: bold; color: #d32f2f; display: inline-block; width: 120px; }
-        .info-value { display: inline-block; }
-        .action { background-color: #4CAF50; color: white; padding: 15px 20px; border-radius: 5px; text-align: center; font-weight: bold; margin-top: 20px; font-size: 16px; }
-        .action-steps { margin-top: 14px; background: #fff3cd; border: 1px solid #ffe08a; border-radius: 6px; padding: 12px 14px; }
-        .action-steps-title { font-weight: bold; color: #b54708; margin-bottom: 6px; }
-        .action-steps ul { margin: 6px 0 0 18px; padding: 0; }
-        .action-steps li { margin: 4px 0; }
-        .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; }
-        .priority-critical { color: #d32f2f; font-weight: bold; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div style="font-size: 24px;">🚨 EMERGENCY ALERT 🚨</div>
-          <div class="emergency-title">${caseId}</div>
-        </div>
-        
-        <div class="content">
-          <div class="info-block">
-            <span class="info-label">Patient ID:</span>
-            <span class="info-value">${patientName}</span>
-          </div>
-          
-          <div class="info-block">
-            <span class="info-label">Priority:</span>
-            <span class="info-value priority-critical">${severity}</span>
-          </div>
-          
-          <div class="info-block">
-            <span class="info-label">Location:</span>
-            <span class="info-value">${location}</span>
-          </div>
-          
-          <div class="info-block">
-            <span class="info-label">Incident Type:</span>
-            <span class="info-value">${incident}</span>
-          </div>
-          
-          <div class="info-block">
-            <span class="info-label">Assigned Hospital:</span>
-            <span class="info-value">${hospitalName}</span>
-          </div>
-          
-          <div class="info-block">
-            <span class="info-label">ETA:</span>
-            <span class="info-value">${eta}</span>
-          </div>
-          
-          <div class="action">⚠️ PLEASE PREPARE IMMEDIATELY AND TAKE ACTION NOW</div>
-          <div class="action-steps">
-            <div class="action-steps-title">Required Action:</div>
-            <ul>
-              <li>Activate ER trauma team now.</li>
-              <li>Reserve emergency bed and critical care equipment.</li>
-              <li>Confirm readiness to receive the patient immediately.</li>
-            </ul>
-          </div>
-        </div>
-        
-        <div class="footer">
-          <p>This is an automated emergency alert from the Hospital Emergency Response System.</p>
-          <p>Please DO NOT reply to this email. Contact your hospital's emergency coordinator immediately.</p>
+  const html = `
+<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:20px;background:#070f2a;font-family:Arial,sans-serif;color:#f3f4f6;">
+    <div style="max-width:640px;margin:0 auto;">
+      <div style="background:#d82d2d;border-radius:16px;padding:28px 24px;text-align:center;color:#ffffff;font-weight:700;">
+        <div style="font-size:62px;line-height:1;">🚨</div>
+        <div style="font-size:40px;line-height:1.1;margin-top:10px;letter-spacing:1px;">EMERGENCY ALERT</div>
+        <div style="font-size:68px;line-height:1;margin-top:14px;">${caseId}</div>
+      </div>
+
+      <div style="margin-top:18px;background:#1f2024;border-left:5px solid #ef4444;border-radius:12px;padding:20px 18px;">
+        <table role="presentation" style="width:100%;border-collapse:collapse;font-size:18px;line-height:1.45;">
+          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Patient ID:</td><td style="padding:6px 0;">${patientName}</td></tr>
+          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Priority:</td><td style="padding:6px 0;color:#f87171;font-weight:700;">${severity}</td></tr>
+          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Location:</td><td style="padding:6px 0;">${location}</td></tr>
+          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Incident Type:</td><td style="padding:6px 0;">${incident}</td></tr>
+          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Assigned Hospital:</td><td style="padding:6px 0;">${hospitalName}</td></tr>
+          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">ETA:</td><td style="padding:6px 0;">${eta}</td></tr>
+        </table>
+
+        <div style="margin-top:16px;background:#4db351;border-radius:12px;padding:16px 14px;text-align:center;color:#ffffff;font-size:40px;line-height:1;">⚠️</div>
+        <div style="margin-top:8px;background:#4db351;border-radius:12px;padding:16px 14px;text-align:center;color:#ffffff;font-size:30px;font-weight:800;letter-spacing:0.6px;">
+          PLEASE PREPARE IMMEDIATELY
         </div>
       </div>
-    </body>
-    </html>
-  `
-  
-  // Plain text version for email clients that don't support HTML
-  const textContent = `🚨 EMERGENCY ALERT 🚨\n\nCase: ${caseId}\nPatient ID: ${patientName}\nPriority: ${severity}\nLocation: ${location}\nIncident Type: ${incident}\nAssigned Hospital: ${hospitalName}\nETA: ${eta}\n\nPLEASE PREPARE IMMEDIATELY AND TAKE ACTION NOW\n\nRequired Action:\n1. Activate ER trauma team now.\n2. Reserve emergency bed and critical care equipment.\n3. Confirm readiness to receive the patient immediately.\n\nThis is an automated emergency alert from the Hospital Emergency Response System.`
-  
-  return { html: htmlContent, text: textContent }
+    </div>
+  </body>
+</html>
+`
+
+  const text =
+    `EMERGENCY ALERT\n` +
+    `${caseId}\n\n` +
+    `Patient ID: ${patientName}\n` +
+    `Priority: ${severity}\n` +
+    `Location: ${location}\n` +
+    `Incident Type: ${incident}\n` +
+    `Assigned Hospital: ${hospitalName}\n` +
+    `ETA: ${eta}\n\n` +
+    `PLEASE PREPARE IMMEDIATELY`
+
+  return { html, text }
 }
 
 const buildEmergencyVoiceMessage = ({ caseDetails = {}, assignedHospital = {} }) => {

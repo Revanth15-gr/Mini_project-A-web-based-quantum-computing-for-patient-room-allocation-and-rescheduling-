@@ -29,6 +29,7 @@ function PatientsInfo() {
     selectedHospital,
     setSelectedHospital,
     addNotification,
+    systemSettings,
   } = useContext(HospitalContext)
   const [formData, setFormData] = useState({
     name: '',
@@ -148,7 +149,19 @@ function PatientsInfo() {
         }
       }
       const hospitalPatients = Array.from(nameMap.values())
-      const hospitalRooms = rooms.filter((r) => r.hospital === selectedHospital)
+      const hasCriticalSelection = hospitalPatients.some((patient) =>
+        /critical|severe|trauma|emergency/i.test(`${patient.status || ''} ${patient.care || ''}`)
+      )
+
+      let hospitalRooms = rooms.filter((r) => r.hospital === selectedHospital)
+      if (systemSettings.lockIcuRooms && !hasCriticalSelection) {
+        const nonIcuRooms = hospitalRooms.filter(
+          (room) => !String(room.equipment || '').toLowerCase().includes('icu')
+        )
+        if (nonIcuRooms.length > 0) {
+          hospitalRooms = nonIcuRooms
+        }
+      }
 
       if (hospitalPatients.length === 0) {
         addNotification(`No patients selected in ${selectedHospital}`, 'error')
@@ -169,6 +182,14 @@ function PatientsInfo() {
         label: p.name || `patient-${i}`,
         priority: 1.2 - i * 0.05,
       }))
+      if (systemSettings.enableIsolationPriority) {
+        hospitalRooms = [...hospitalRooms].sort((a, b) => {
+          const aIsolation = String(a.equipment || '').toLowerCase().includes('isolation') ? 0 : 1
+          const bIsolation = String(b.equipment || '').toLowerCase().includes('isolation') ? 0 : 1
+          return aIsolation - bIsolation
+        })
+      }
+
       roomsForQaoa = hospitalRooms.slice(0, maxQaoaSize).map((r) => r.name)
       
       if (hospitalPatients.length > maxQaoaSize) {
@@ -222,7 +243,12 @@ function PatientsInfo() {
           `Fallback schedule applied: ${offlineResult.assignments.length} patients` +
             (lastFetchError?.message ? ` (${lastFetchError.message})` : '')
         )
-        await applyOptimizedSchedule(offlineResult)
+        if (systemSettings.autoRescheduleConflicts) {
+          await applyOptimizedSchedule(offlineResult)
+        } else {
+          addNotification('Auto-reschedule is disabled. Review results and apply manually.', 'info')
+          pushAction('Auto-reschedule disabled. Manual apply required.')
+        }
         return
       }
 
@@ -265,7 +291,12 @@ function PatientsInfo() {
       pushAction(
         `Rescheduling complete: ${normalizedResult.assignments.length} patients optimized with cost ${normalizedResult.cost?.toFixed(2) || 'N/A'}`
       )
-      await applyOptimizedSchedule(normalizedResult)
+      if (systemSettings.autoRescheduleConflicts) {
+        await applyOptimizedSchedule(normalizedResult)
+      } else {
+        addNotification('Optimization ready. Auto-reschedule is disabled in Settings.', 'info')
+        pushAction('Optimization completed. Apply schedule manually.')
+      }
     } catch (error) {
       console.error('Rescheduling error:', error)
       const offlineResult = buildOfflineResult()
@@ -273,7 +304,12 @@ function PatientsInfo() {
         setReschedulingResult(offlineResult)
         addNotification('Network issue detected. Applied local fallback scheduling.', 'warning')
         pushAction('Rescheduling service unreachable. Applied local fallback schedule.')
-        await applyOptimizedSchedule(offlineResult)
+        if (systemSettings.autoRescheduleConflicts) {
+          await applyOptimizedSchedule(offlineResult)
+        } else {
+          addNotification('Fallback schedule ready. Auto-reschedule is disabled.', 'info')
+          pushAction('Fallback schedule ready. Manual apply required.')
+        }
       } else {
         addNotification(`Rescheduling failed: ${error.message}`, 'error')
         pushAction(`Rescheduling error: ${error.message}`)
