@@ -169,12 +169,60 @@ const seedPatients = [
   },
 ]
 
+const seedOpAppointments = [
+  {
+    id: 'OP-1001',
+    patientName: 'Kiran Varma',
+    hospital: 'Vizag City Care Hospital',
+    department: 'Cardiology',
+    doctorName: 'Dr. A. Kumar',
+    appointmentDate: '2026-03-26',
+    appointmentTime: '09:30',
+    status: 'Booked',
+    type: 'OP',
+  },
+  {
+    id: 'OP-1002',
+    patientName: 'Sneha Rao',
+    hospital: 'Vijayawada Heart Institute',
+    department: 'Orthopedics',
+    doctorName: 'Dr. B. Reddy',
+    appointmentDate: '2026-03-26',
+    appointmentTime: '11:00',
+    status: 'Booked',
+    type: 'OP',
+  },
+]
+
+const seedOperationRooms = hospitalNames.flatMap((hospital) =>
+  ['OR-1', 'OR-2', 'OR-3'].map((roomName, index) => ({
+    id: `${hospital}-OR-${index + 1}`,
+    name: roomName,
+    hospital,
+    equipment: index === 0 ? 'Major Surgery Suite' : index === 1 ? 'General Surgery' : 'Laparoscopic Suite',
+    status: 'Available',
+  }))
+)
+
+const toClientRecord = (record) => {
+  if (!record) {
+    return null
+  }
+  return {
+    ...record,
+    id: record.id || record._id,
+  }
+}
+
 function HospitalProvider({ children }) {
   const [patients, setPatients] = useState(seedPatients)
   const [doctors, setDoctors] = useState(doctorInventory)
   const [selectedHospital, setSelectedHospital] = useState('Vizag City Care Hospital')
   const [notifications, setNotifications] = useState([])
   const [systemSettings, setSystemSettings] = useState(() => readStoredSystemSettings())
+  const [opAppointments, setOpAppointments] = useState(seedOpAppointments)
+  const [operationRooms, setOperationRooms] = useState(seedOperationRooms)
+  const [operationAllocations, setOperationAllocations] = useState([])
 
   useEffect(() => {
     try {
@@ -250,6 +298,53 @@ function HospitalProvider({ children }) {
     const interval = setInterval(rotateStatuses, 3 * 60 * 60 * 1000)
 
     return () => clearInterval(interval)
+  }, [])
+
+  // Load OP appointments and OR allocations from MongoDB when available.
+  useEffect(() => {
+    const loadOperationsData = async () => {
+      try {
+        const [appointmentsResponse, allocationsResponse] = await Promise.all([
+          fetch('/api/op-appointments'),
+          fetch('/api/operation-allocations'),
+        ])
+
+        if (appointmentsResponse.ok) {
+          const appointments = await appointmentsResponse.json()
+          if (Array.isArray(appointments) && appointments.length > 0) {
+            setOpAppointments(appointments.map(toClientRecord))
+          }
+        }
+
+        if (allocationsResponse.ok) {
+          const allocations = await allocationsResponse.json()
+          if (Array.isArray(allocations) && allocations.length > 0) {
+            const normalizedAllocations = allocations.map(toClientRecord)
+            setOperationAllocations(normalizedAllocations)
+
+            const activeRoomIds = new Set(
+              normalizedAllocations
+                .filter((item) => item.status === 'Allocated')
+                .map((item) => item.roomId)
+            )
+
+            if (activeRoomIds.size > 0) {
+              setOperationRooms((current) =>
+                current.map((room) =>
+                  activeRoomIds.has(room.id)
+                    ? { ...room, status: 'Allocated' }
+                    : room
+                )
+              )
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not load operations module data:', error.message)
+      }
+    }
+
+    loadOperationsData()
   }, [])
 
   const addPatient = async (patient) => {
@@ -456,6 +551,179 @@ function HospitalProvider({ children }) {
     )
   }
 
+  const bookOpAppointment = async (appointmentInput) => {
+    const nextAppointment = {
+      patientName: appointmentInput.patientName,
+      hospital: appointmentInput.hospital,
+      department: appointmentInput.department,
+      doctorName: appointmentInput.doctorName,
+      appointmentDate: appointmentInput.appointmentDate,
+      appointmentTime: appointmentInput.appointmentTime,
+      status: 'Booked',
+      type: 'OP',
+      createdAt: new Date().toISOString(),
+    }
+
+    try {
+      const response = await fetch('/api/op-appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextAppointment),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to save OP appointment (${response.status})`)
+      }
+
+      const savedAppointment = toClientRecord(await response.json())
+      setOpAppointments((current) => [savedAppointment, ...current])
+      addNotification(`OP appointment booked for ${savedAppointment.patientName}`, 'success')
+      return savedAppointment
+    } catch (error) {
+      const fallbackAppointment = {
+        ...nextAppointment,
+        id: `OP-${Date.now()}`,
+      }
+      setOpAppointments((current) => [fallbackAppointment, ...current])
+      addNotification(`Saved locally: ${fallbackAppointment.patientName} (DB unavailable)`, 'warning')
+      return fallbackAppointment
+    }
+  }
+
+  const cancelOpAppointment = async (appointmentId) => {
+    try {
+      await fetch(`/api/op-appointments/${appointmentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Cancelled' }),
+      })
+    } catch (error) {
+      console.warn('⚠️ Could not persist OP cancellation:', error.message)
+    }
+
+    setOpAppointments((current) =>
+      current.map((item) => (item.id === appointmentId ? { ...item, status: 'Cancelled' } : item))
+    )
+  }
+
+  const allocateOperationRoom = async ({
+    appointmentId,
+    patientName,
+    hospital,
+    procedure,
+    priority,
+    scheduledAt,
+    estimatedDurationHours,
+  }) => {
+    const availableRooms = operationRooms.filter(
+      (room) => room.hospital === hospital && room.status === 'Available'
+    )
+
+    if (!availableRooms.length) {
+      addNotification(`No operation room available in ${hospital}`, 'warning')
+      return null
+    }
+
+    const selectedRoom = availableRooms[0]
+    const allocation = {
+      appointmentId,
+      patientName,
+      hospital,
+      procedure,
+      priority,
+      scheduledAt,
+      estimatedDurationHours,
+      roomId: selectedRoom.id,
+      roomName: selectedRoom.name,
+      status: 'Allocated',
+      allocatedAt: new Date().toISOString(),
+    }
+
+    let finalAllocation = allocation
+
+    try {
+      const response = await fetch('/api/operation-allocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allocation),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to persist OR allocation (${response.status})`)
+      }
+
+      finalAllocation = toClientRecord(await response.json())
+    } catch (error) {
+      finalAllocation = {
+        ...allocation,
+        id: `OR-ALLOC-${Date.now()}`,
+      }
+      console.warn('⚠️ OR allocation saved locally:', error.message)
+      addNotification('OR allocation saved locally (DB unavailable)', 'warning')
+    }
+
+    setOperationRooms((current) =>
+      current.map((room) =>
+        room.id === selectedRoom.id
+          ? { ...room, status: 'Allocated' }
+          : room
+      )
+    )
+
+    setOperationAllocations((current) => [finalAllocation, ...current])
+
+    if (appointmentId) {
+      setOpAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === appointmentId
+            ? { ...appointment, status: 'Moved to OR' }
+            : appointment
+        )
+      )
+    }
+
+    addNotification(
+      `${finalAllocation.roomName} allocated for ${finalAllocation.patientName} (${finalAllocation.procedure})`,
+      'success'
+    )
+
+    return finalAllocation
+  }
+
+  const releaseOperationRoom = async (allocationId) => {
+    const activeAllocation = operationAllocations.find((item) => item.id === allocationId)
+    if (!activeAllocation) {
+      return
+    }
+
+    try {
+      await fetch(`/api/operation-allocations/${allocationId}/complete`, {
+        method: 'PUT',
+      })
+    } catch (error) {
+      console.warn('⚠️ Could not persist OR completion:', error.message)
+    }
+
+    setOperationRooms((current) =>
+      current.map((room) =>
+        room.id === activeAllocation.roomId ? { ...room, status: 'Available' } : room
+      )
+    )
+
+    setOperationAllocations((current) =>
+      current.map((item) =>
+        item.id === allocationId
+          ? { ...item, status: 'Completed', completedAt: new Date().toISOString() }
+          : item
+      )
+    )
+
+    addNotification(
+      `${activeAllocation.roomName} released for next surgical allocation`,
+      'info'
+    )
+  }
+
 
 
   const value = {
@@ -473,6 +741,13 @@ function HospitalProvider({ children }) {
     addNotification,
     systemSettings,
     updateSystemSetting,
+    opAppointments,
+    bookOpAppointment,
+    cancelOpAppointment,
+    operationRooms,
+    operationAllocations,
+    allocateOperationRoom,
+    releaseOperationRoom,
   }
 
   return <HospitalContext.Provider value={value}>{children}</HospitalContext.Provider>

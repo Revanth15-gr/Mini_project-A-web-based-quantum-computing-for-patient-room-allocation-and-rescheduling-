@@ -14,6 +14,8 @@ import { Doctor } from './models/Doctor.js'
 import { Patient } from './models/Patient.js'
 import { Discharge } from './models/Discharge.js'
 import { EmergencyCase } from './models/EmergencyCase.js'
+import { OpAppointment } from './models/OpAppointment.js'
+import { OperationAllocation } from './models/OperationAllocation.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -580,6 +582,103 @@ app.post('/api/optimize', async (req, res) => {
   }
 })
 
+// ===== HYBRID MULTI-QUANTUM API PROXY =====
+const proxyQuantumRequest = async ({ method = 'get', endpoint, body = undefined, timeout = 20000 }) => {
+  const response = await axios({
+    method,
+    url: `${QAOA_URL}${endpoint}`,
+    data: body,
+    headers: { 'Content-Type': 'application/json' },
+    timeout,
+  })
+  return response.data
+}
+
+app.post('/api/quantum/room-allocation', async (req, res) => {
+  try {
+    const data = await proxyQuantumRequest({ method: 'post', endpoint: '/quantum/room-allocation', body: req.body })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/room-allocation',
+    })
+  }
+})
+
+app.post('/api/quantum/emergency', async (req, res) => {
+  try {
+    const data = await proxyQuantumRequest({ method: 'post', endpoint: '/quantum/emergency', body: req.body })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/emergency',
+    })
+  }
+})
+
+app.post('/api/quantum/operating-room', async (req, res) => {
+  try {
+    const data = await proxyQuantumRequest({ method: 'post', endpoint: '/quantum/operating-room', body: req.body })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/operating-room',
+    })
+  }
+})
+
+app.post('/api/quantum/ambulance', async (req, res) => {
+  try {
+    const data = await proxyQuantumRequest({ method: 'post', endpoint: '/quantum/ambulance', body: req.body })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/ambulance',
+    })
+  }
+})
+
+app.post('/api/quantum/resource-balance', async (req, res) => {
+  try {
+    const data = await proxyQuantumRequest({ method: 'post', endpoint: '/quantum/resource-balance', body: req.body })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/resource-balance',
+    })
+  }
+})
+
+app.get('/api/quantum/prediction', async (req, res) => {
+  try {
+    const data = await proxyQuantumRequest({ method: 'get', endpoint: '/quantum/prediction' })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/prediction',
+    })
+  }
+})
+
+app.get('/api/quantum/simulation', async (req, res) => {
+  try {
+    const sampleSize = Number(req.query.sampleSize || 6)
+    const data = await proxyQuantumRequest({ method: 'get', endpoint: `/quantum/simulation?sample_size=${sampleSize}` })
+    res.json(data)
+  } catch (error) {
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.detail || error.message,
+      endpoint: '/quantum/simulation',
+    })
+  }
+})
+
 // ===== SEED DATABASE (Initialize with default data) =====
 app.post('/api/seed', async (req, res) => {
   try {
@@ -675,6 +774,77 @@ app.delete('/api/emergency-cases/:id', async (req, res) => {
   try {
     await EmergencyCase.findByIdAndDelete(req.params.id)
     res.json({ message: 'Emergency case deleted' })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// ===== OP APPOINTMENTS API =====
+app.get('/api/op-appointments', async (req, res) => {
+  try {
+    const appointments = await OpAppointment.find().sort({ createdAt: -1 })
+    res.json(appointments)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post('/api/op-appointments', async (req, res) => {
+  try {
+    const appointment = await OpAppointment.create(req.body)
+    res.status(201).json(appointment)
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.put('/api/op-appointments/:id', async (req, res) => {
+  try {
+    const appointment = await OpAppointment.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    if (!appointment) {
+      return res.status(404).json({ error: 'OP appointment not found' })
+    }
+    res.json(appointment)
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// ===== OPERATION ALLOCATION API =====
+app.get('/api/operation-allocations', async (req, res) => {
+  try {
+    const allocations = await OperationAllocation.find().sort({ createdAt: -1 })
+    res.json(allocations)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post('/api/operation-allocations', async (req, res) => {
+  try {
+    const allocation = await OperationAllocation.create(req.body)
+    res.status(201).json(allocation)
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.put('/api/operation-allocations/:id/complete', async (req, res) => {
+  try {
+    const allocation = await OperationAllocation.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: 'Completed',
+        completedAt: new Date().toISOString(),
+      },
+      { new: true },
+    )
+
+    if (!allocation) {
+      return res.status(404).json({ error: 'Operation allocation not found' })
+    }
+
+    res.json(allocation)
   } catch (error) {
     res.status(400).json({ error: error.message })
   }
@@ -943,6 +1113,10 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/emergency-cases         - Get all emergency cases`)
   console.log(`   POST /api/emergency-cases         - Create emergency case`)
   console.log(`   PUT  /api/emergency-cases/:id     - Update emergency case`)
+  console.log(`   GET  /api/op-appointments         - Get OP appointments`)
+  console.log(`   POST /api/op-appointments         - Create OP appointment`)
+  console.log(`   GET  /api/operation-allocations   - Get OR allocations`)
+  console.log(`   POST /api/operation-allocations   - Create OR allocation`)
   console.log(`   POST /api/emergency/notify        - Send emergency email/voice/sms alerts`)
   console.log(`   POST /api/emergency/voice-call    - Trigger emergency voice call alert`)
   console.log(`   POST /api/optimize                - Run QAOA optimization`)

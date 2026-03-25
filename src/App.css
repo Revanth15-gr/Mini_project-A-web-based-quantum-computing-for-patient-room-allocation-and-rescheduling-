@@ -15,6 +15,7 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow: hidden;
 }
 
 .brand {
@@ -58,6 +59,17 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.nav-links::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .nav-link {
@@ -92,6 +104,7 @@
 
 .side-footer {
   margin-top: auto;
+  flex-shrink: 0;
 }
 
 .side-card {
@@ -402,6 +415,109 @@
   color: #4f6185;
   font-variant-numeric: tabular-nums;
   font-size: 0.82rem;
+}
+
+.operations-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.7rem;
+}
+
+.operations-form input,
+.operations-form select {
+  width: 100%;
+  border: 1px solid rgba(15, 34, 65, 0.14);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.operations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.operation-item-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+  background: rgba(76, 141, 255, 0.07);
+  border: 1px solid rgba(76, 141, 255, 0.14);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.operation-item-title {
+  margin: 0;
+  font-weight: 700;
+  color: #0f2241;
+}
+
+.operation-item-meta {
+  margin: 0.25rem 0 0;
+  color: #5c6a85;
+  font-size: 0.84rem;
+}
+
+.operation-item-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.bell-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.7rem;
+}
+
+.bell-grid select {
+  border: 1px solid rgba(15, 34, 65, 0.14);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.bell-result {
+  border-radius: 12px;
+  border: 1px solid rgba(76, 141, 255, 0.22);
+  background: linear-gradient(120deg, rgba(76, 141, 255, 0.11), rgba(74, 203, 255, 0.12));
+  padding: 0.85rem;
+}
+
+.bell-result p {
+  margin: 0.3rem 0;
+  color: #16345c;
+}
+
+.quantum-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.quantum-result-box {
+  border: 1px solid rgba(15, 34, 65, 0.14);
+  border-radius: 12px;
+  background: #f6f9ff;
+  padding: 0.85rem;
+}
+
+.quantum-result-pre {
+  margin: 0.6rem 0 0;
+  max-height: 280px;
+  overflow: auto;
+  background: #0f2241;
+  color: #dce8ff;
+  border-radius: 8px;
+  padding: 0.7rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .report-page {
@@ -1712,11 +1828,13 @@
     height: auto;
     flex-direction: row;
     flex-wrap: wrap;
+    overflow: visible;
   }
 
   .nav-links {
     flex-direction: row;
     flex-wrap: wrap;
+    overflow: visible;
   }
 }
 

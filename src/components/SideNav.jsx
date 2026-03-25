@@ -10,6 +10,7 @@ const links = [
   { to: '/rooms', label: 'Rooms' },
   { to: '/doctors', label: 'Doctors' },
   { to: '/analytics', label: 'Emergency' },
+  { to: '/operations', label: 'OP & OR + Bell' },
   { to: '/discharges', label: 'Discharge History' },
   { to: '/settings', label: 'Settings' },
 ]

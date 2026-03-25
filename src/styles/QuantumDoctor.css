@@ -1,0 +1,662 @@
+/* Quantum Doctor Scheduler Styling */
+
+:root {
+  --quantum-primary: #0099ff;
+  --quantum-secondary: #00ffff;
+  --quantum-accent: #ff006e;
+  --quantum-bg-dark: #0a0e27;
+  --quantum-bg-light: #1a1a3e;
+  --quantum-success: #00c853;
+  --quantum-warning: #ff9800;
+  --quantum-danger: #f44336;
+}
+
+/* Main Scheduler Page */
+.quantum-scheduler-page {
+  background: linear-gradient(135deg, var(--quantum-bg-dark) 0%, var(--quantum-bg-light) 100%);
+  min-height: 100vh;
+  padding: 2rem;
+  color: #fff;
+}
+
+.scheduler-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.scheduler-header h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(90deg, var(--quantum-primary), var(--quantum-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.scheduler-header p {
+  font-size: 1.1rem;
+  color: #ccc;
+}
+
+/* Controls */
+.scheduler-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.control-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.control-group input,
+.control-group select {
+  padding: 0.75rem 1rem;
+  border: 1px solid #00ffff;
+  background: rgba(0, 255, 255, 0.1);
+  border-radius: 5px;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.control-group input::placeholder {
+  color: #888;
+}
+
+.control-group.checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.control-group.checkbox input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* Buttons */
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 5px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-quantum-primary {
+  background: linear-gradient(90deg, var(--quantum-primary), var(--quantum-secondary));
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-quantum-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 153, 255, 0.4);
+}
+
+.btn-quantum-primary.loading,
+.btn-quantum-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.8; }
+}
+
+/* Algorithm Badge */
+.algorithm-badge {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 153, 255, 0.1);
+  border: 2px solid var(--quantum-primary);
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+}
+
+.algorithm-badge span {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Scheduler Layout */
+.scheduler-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.left-pane,
+.right-pane {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Doctor Schedule Board */
+.doctor-schedule-board {
+  width: 100%;
+}
+
+.schedule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.schedule-header h2 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.schedule-table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.doctor-schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.doctor-schedule-table th {
+  background: rgba(0, 153, 255, 0.2);
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 2px solid var(--quantum-primary);
+}
+
+.doctor-schedule-table td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shift-cell {
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.doctors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.doctor-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(0, 153, 255, 0.2);
+  border-left: 3px solid var(--quantum-primary);
+}
+
+.doctor-badge.normal-fatigue {
+  background: rgba(0, 200, 83, 0.2);
+  border-left-color: var(--quantum-success);
+}
+
+.doctor-badge.medium-fatigue {
+  background: rgba(255, 152, 0, 0.2);
+  border-left-color: var(--quantum-warning);
+}
+
+.doctor-badge.high-fatigue {
+  background: rgba(244, 67, 54, 0.2);
+  border-left-color: var(--quantum-danger);
+}
+
+/* Legend */
+.schedule-legend {
+  display: flex;
+  gap: 2rem;
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+.legend-green,
+.legend-orange,
+.legend-red {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 0.5rem;
+}
+
+.legend-green { background: var(--quantum-success); }
+.legend-orange { background: var(--quantum-warning); }
+.legend-red { background: var(--quantum-danger); }
+
+/* Workload Chart Container */
+.workload-chart-container {
+  width: 100%;
+}
+
+.workload-chart-container h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.workload-chart.empty {
+  text-align: center;
+  padding: 2rem;
+  color: #888;
+}
+
+.custom-tooltip {
+  background: rgba(10, 14, 39, 0.95);
+  border: 1px solid #00ffff;
+  padding: 0.75rem 1rem;
+  border-radius: 5px;
+  font-size: 0.85rem;
+}
+
+.custom-tooltip p {
+  margin: 0.25rem 0;
+  color: #fff;
+}
+
+.workload-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(0, 255, 255, 0.05);
+  border-radius: 5px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.stat-value {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: var(--quantum-secondary);
+}
+
+/* Emergency Panel */
+.emergency-panel {
+  background: rgba(244, 67, 54, 0.1);
+  border: 2px solid rgba(244, 67, 54, 0.3);
+  border-radius: 10px;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  max-height: 100px;
+  transition: max-height 0.3s ease;
+}
+
+.emergency-panel.active {
+  border-color: var(--quantum-danger);
+  background: rgba(244, 67, 54, 0.15);
+}
+
+.emergency-panel.active.expanded {
+  max-height: 600px;
+}
+
+.emergency-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  cursor: pointer;
+}
+
+.alert-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.alert-icon {
+  font-size: 1.5rem;
+}
+
+.emergency-content {
+  padding: 1.5rem;
+  border-top: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.emergency-doctors {
+  margin-bottom: 1rem;
+}
+
+.emergency-doctor-card {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1rem;
+  border-radius: 5px;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid var(--quantum-accent);
+}
+
+.doctor-info {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.rank {
+  background: var(--quantum-primary);
+  color: #000;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-weight: bold;
+}
+
+.name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.specialization {
+  background: rgba(0, 255, 255, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.priority-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.priority-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--quantum-primary), var(--quantum-secondary));
+  border-radius: 4px;
+}
+
+.doctor-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: #ccc;
+}
+
+.emergency-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.emergency-actions .btn {
+  flex: 1;
+}
+
+.auto-refresh {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* Explainability Card */
+.explainability-container {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 2rem;
+}
+
+.explainability-container h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.explanations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.explanation-card {
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 5px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.explanation-card.expanded {
+  background: rgba(0, 255, 255, 0.1);
+  border-color: var(--quantum-secondary);
+}
+
+.explanation-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-size: 1rem;
+  transition: background 0.3s ease;
+}
+
+.explanation-header:hover {
+  background: rgba(0, 255, 255, 0.1);
+}
+
+.expand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  transition: transform 0.3s ease;
+}
+
+.explanation-key {
+  flex: 1;
+  font-weight: 600;
+}
+
+.explanation-content {
+  padding: 1rem;
+  border-top: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+.explanation-text {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  color: #00ffff;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0 0 1rem 0;
+}
+
+.explanation-indicators {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  background: rgba(0, 255, 255, 0.1);
+  border-radius: 5px;
+}
+
+.indicator .icon {
+  font-size: 1rem;
+}
+
+.explainability-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(0, 153, 255, 0.1);
+  border-left: 3px solid var(--quantum-primary);
+  border-radius: 5px;
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.explainability-info p {
+  margin: 0;
+}
+
+/* Info Section */
+.scheduler-info {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scheduler-info h3 {
+  margin-top: 0;
+  color: var(--quantum-secondary);
+}
+
+.scheduler-info p {
+  color: #ccc;
+  line-height: 1.6;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .scheduler-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .quantum-scheduler-page {
+    padding: 1rem;
+  }
+
+  .scheduler-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .scheduler-controls {
+    flex-direction: column;
+  }
+
+  .control-group {
+    flex: 1;
+  }
+
+  .algorithm-badge {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .explanations-list {
+    max-height: 300px;
+  }
+
+  .explanation-indicators {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .scheduler-header h1 {
+    font-size: 1.3rem;
+  }
+
+  .scheduler-controls {
+    gap: 0.75rem;
+  }
+
+  /* Scrollable explanations on mobile */
+  .explanations-list {
+    max-height: 250px;
+  }
+}
+
+/* Scrollbar Styling */
+.explanations-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.explanations-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.explanations-list::-webkit-scrollbar-thumb {
+  background: var(--quantum-primary);
+  border-radius: 10px;
+}
+
+.explanations-list::-webkit-scrollbar-thumb:hover {
+  background: var(--quantum-secondary);
+}
+
+/* Print Stylesheet */
+@media print {
+  .scheduler-controls,
+  .emergency-panel {
+    display: none;
+  }
+
+  .scheduler-layout {
+    grid-template-columns: 1fr;
+  }
+}

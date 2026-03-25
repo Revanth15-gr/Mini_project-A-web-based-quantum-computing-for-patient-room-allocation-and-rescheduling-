@@ -9,7 +9,9 @@ import Doctors from './pages/Doctors.jsx'
 import Emergency from './pages/Analytics.jsx'
 import DischargeHistory from './pages/DischargeHistory.jsx'
 import Settings from './pages/Settings.jsx'
+import Operations from './pages/Operations.jsx'
 import OptimizationReport from './pages/OptimizationReport.jsx'
+import QuantumHackathonDemo from './pages/QuantumHackathonDemo.jsx'
 import './App.css'
 
 function App() {
@@ -23,9 +25,11 @@ function App() {
           <Route path="rooms" element={<Rooms />} />
           <Route path="doctors" element={<Doctors />} />
           <Route path="analytics" element={<Emergency />} />
+          <Route path="operations" element={<Operations />} />
           <Route path="discharges" element={<DischargeHistory />} />
           <Route path="settings" element={<Settings />} />
         </Route>
+        <Route path="quantum-demo" element={<QuantumHackathonDemo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
         <Route path="optimization-report" element={<OptimizationReport />} />
       </Routes>
