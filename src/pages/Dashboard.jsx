@@ -752,12 +752,14 @@ function Dashboard() {
             <video
               className="dashboard-video"
               src={DASHBOARD_VIDEO_SRC}
-              preload="metadata"
+              preload="auto"
               autoPlay
               loop
-              controls={false}
+              controls
               muted
               playsInline
+              crossOrigin="anonymous"
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             />
           </div>
         </section>
