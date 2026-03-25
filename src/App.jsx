@@ -6,12 +6,14 @@ import Hospitals from './pages/Hospitals.jsx'
 import PatientsInfo from './pages/PatientsInfo.jsx'
 import Rooms from './pages/Rooms.jsx'
 import Doctors from './pages/Doctors.jsx'
-import Emergency from './pages/Analytics.jsx'
+import Emergency from './pages/Emergency.jsx'
+import Analytics from './pages/Analytics.jsx'
 import DischargeHistory from './pages/DischargeHistory.jsx'
 import Settings from './pages/Settings.jsx'
 import Operations from './pages/Operations.jsx'
 import OptimizationReport from './pages/OptimizationReport.jsx'
 import QuantumHackathonDemo from './pages/QuantumHackathonDemo.jsx'
+import DoctorShift from './pages/DoctorShift.jsx'
 import './App.css'
 
 function App() {
@@ -25,6 +27,9 @@ function App() {
           <Route path="rooms" element={<Rooms />} />
           <Route path="doctors" element={<Doctors />} />
           <Route path="analytics" element={<Emergency />} />
+          <Route path="emergency" element={<Emergency />} />
+          <Route path="analytics-legacy" element={<Analytics />} />
+          <Route path="doctor-shift" element={<DoctorShift />} />
           <Route path="operations" element={<Operations />} />
           <Route path="discharges" element={<DischargeHistory />} />
           <Route path="settings" element={<Settings />} />

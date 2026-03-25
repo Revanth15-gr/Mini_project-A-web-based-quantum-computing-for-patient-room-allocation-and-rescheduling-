@@ -2,6 +2,9 @@ import { useContext, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
 
 function Rooms() {
+  const [quantumLoading, setQuantumLoading] = useState(false)
+  const [quantumMessage, setQuantumMessage] = useState('')
+
   const pushAction = (message) => {
     window.dispatchEvent(new CustomEvent('app-action', { detail: message }))
   }
@@ -23,6 +26,52 @@ function Rooms() {
         }
       })
   }, [rooms, patients, selectedHospital])
+
+  const handleQuantumRoomAllocation = async () => {
+    setQuantumLoading(true)
+    setQuantumMessage('')
+
+    try {
+      const payload = {
+        patients: patients
+          .filter((patient) => patient.hospital === selectedHospital)
+          .map((patient, index) => ({
+            id: patient.id || patient._id || `${patient.name}-${index}`,
+            priority: patient.status === 'Critical' ? 'high' : 'medium',
+            icu: String(patient.care || '').toLowerCase().includes('icu'),
+            department: patient.care || 'General',
+          })),
+        rooms: roomView.map((room, index) => ({
+          id: room.id || room.name || `room-${index}`,
+          type: String(room.equipment || '').toLowerCase().includes('icu') ? 'ICU' : 'General',
+          available: room.status === 'Available',
+          department: room.equipment || 'General',
+          hospital: room.hospital,
+        })),
+      }
+
+      const response = await fetch('/api/quantum-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || `Quantum room API returned ${response.status}`)
+      }
+
+      const assigned = data.assigned_count ?? data.assignments?.filter((item) => item.room_id).length ?? 0
+      const total = data.total_patients ?? payload.patients.length
+      const message = `Quantum room allocation completed: ${assigned}/${total} assigned`
+      setQuantumMessage(message)
+      pushAction(message)
+    } catch (error) {
+      setQuantumMessage(error.message || 'Quantum room allocation failed')
+    } finally {
+      setQuantumLoading(false)
+    }
+  }
 
   return (
     <div className="page-grid">
@@ -59,8 +108,17 @@ function Rooms() {
             >
               Update Inventory
             </button>
+            <button
+              className="outline-button"
+              type="button"
+              onClick={handleQuantumRoomAllocation}
+              disabled={quantumLoading}
+            >
+              {quantumLoading ? 'Allocating...' : 'Allocate Using Quantum'}
+            </button>
           </div>
         </div>
+        {quantumMessage ? <p className="panel-subtitle">{quantumMessage}</p> : null}
         <div className="card-grid">
           {roomView.map((room) => (
             <article

@@ -16,6 +16,7 @@ import { Discharge } from './models/Discharge.js'
 import { EmergencyCase } from './models/EmergencyCase.js'
 import { OpAppointment } from './models/OpAppointment.js'
 import { OperationAllocation } from './models/OperationAllocation.js'
+import quantumRoutes from './routes/quantum.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -30,6 +31,7 @@ const DEFAULT_ALERT_PHONE = process.env.EMERGENCY_ALERT_PHONE || '+919392759970'
 
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
+app.use('/api', quantumRoutes)
 
 // Serve static React build files in production
 const distPath = path.resolve(path.join(__dirname, '../../dist'))

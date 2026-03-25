@@ -142,7 +142,7 @@ function getAssignmentPatientName(item) {
 }
 
 function Dashboard() {
-  const { patients, rooms: roomInventory, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
+  const { patients, doctors, rooms: roomInventory, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
   const [optimizing, setOptimizing] = useState(false)
   const [activeTab, setActiveTab] = useState('scheduler')
   const [qaoaResult, setQaoaResult] = useState(null)
@@ -151,6 +151,15 @@ function Dashboard() {
   const [runHistory, setRunHistory] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [latestReport, setLatestReport] = useState(() => readLatestReport())
+  const [quantumPanelState, setQuantumPanelState] = useState({
+    loading: '',
+    room: null,
+    emergency: null,
+    doctor: null,
+    error: '',
+  })
+  const [realTimeEnabled, setRealTimeEnabled] = useState(true)
+  const [lastRealtimeAction, setLastRealtimeAction] = useState('Idle')
 
   const qaoaPatients = useMemo(
     () =>
@@ -514,6 +523,110 @@ function Dashboard() {
     }
   }
 
+  const runQuantumPanel = async (panelType) => {
+    setQuantumPanelState((prev) => ({ ...prev, loading: panelType, error: '' }))
+
+    try {
+      const endpoints = {
+        room: '/api/quantum-room',
+        emergency: '/api/quantum-emergency',
+        doctor: '/api/quantum-doctor',
+      }
+
+      const payloadMap = {
+        room: {
+          patients: qaoaPatients.map((patient) => ({
+            id: patient.id,
+            priority: patient.priority > 1 ? 'high' : 'medium',
+            icu: false,
+            department: 'General Medicine',
+          })),
+          rooms: hospitalRooms.slice(0, 12).map((room) => ({
+            id: room.name,
+            type: String(room.equipment || '').toLowerCase().includes('icu') ? 'ICU' : 'General',
+            available: !currentRoomAssignments[room.name],
+            department: room.equipment,
+            hospital: room.hospital,
+          })),
+        },
+        emergency: {
+          emergencies: [
+            {
+              patient_id: `EM-${Date.now()}`,
+              severity: 'high',
+              required_department: 'Emergency',
+              location: selectedHospital,
+            },
+          ],
+          hospitals: hospitals.slice(0, 3).map((name, index) => ({
+            name,
+            icu_available: 4 + (2 - index),
+            doctors_available: 10 - index,
+            distance_km: 2 + index * 3,
+          })),
+        },
+        doctor: {
+          doctors: doctors
+            .filter((doctor) => doctor.hospital === selectedHospital)
+            .slice(0, 18)
+            .map((doctor) => ({
+              id: doctor.id,
+              name: doctor.name,
+              specialization: doctor.specialty,
+              availability: ['morning', 'afternoon', 'night'],
+              experience: Math.max(1, Math.round((doctor.patients || 1) / 2)),
+              available: doctor.status !== 'Off Shift',
+              fatigue_score: doctor.status === 'On Duty' ? 0.6 : 0.2,
+            })),
+          shifts: [
+            { shift: 'morning', department: 'ICU', specialization: 'Emergency Care' },
+            { shift: 'afternoon', department: 'Surgery', specialization: 'Surgery' },
+            { shift: 'night', department: 'Emergency', specialization: 'Emergency Care' },
+          ],
+        },
+      }
+
+      const response = await fetch(endpoints[panelType], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadMap[panelType]),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || `Quantum panel request failed: ${response.status}`)
+      }
+
+      setQuantumPanelState((prev) => ({ ...prev, loading: '', [panelType]: data }))
+    } catch (error) {
+      setQuantumPanelState((prev) => ({ ...prev, loading: '', error: error.message || 'Quantum panel request failed' }))
+    }
+  }
+
+  const handleRealtimeEvent = async (eventType) => {
+    if (!realTimeEnabled) {
+      setLastRealtimeAction(`Skipped ${eventType} event (real-time optimization disabled)`)
+      return
+    }
+
+    if (eventType === 'patient-arrival') {
+      setLastRealtimeAction('New patient arrived -> re-running room optimization')
+      await runQuantumPanel('room')
+      return
+    }
+
+    if (eventType === 'emergency-occurred') {
+      setLastRealtimeAction('Emergency detected -> re-running emergency allocation')
+      await runQuantumPanel('emergency')
+      return
+    }
+
+    if (eventType === 'doctor-unavailable') {
+      setLastRealtimeAction('Doctor unavailable -> re-running doctor shift allocation')
+      await runQuantumPanel('doctor')
+    }
+  }
+
   return (
     <div className="dashboard-grid">
       <div className="dashboard-main">
@@ -543,6 +656,95 @@ function Dashboard() {
               Reschedule Patient
             </button>
           </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <h3>Advanced Quantum Optimization Panels</h3>
+              <p className="panel-subtitle">Room, emergency, and doctor optimization with hybrid quantum orchestration</p>
+            </div>
+          </div>
+
+          <div className="stats-row">
+            <div className="stat-card">
+              <p><strong>Quantum Room Allocation</strong></p>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={() => runQuantumPanel('room')}
+                disabled={quantumPanelState.loading === 'room'}
+              >
+                {quantumPanelState.loading === 'room' ? 'Running...' : 'Run Quantum Room Allocation'}
+              </button>
+              <p style={{ marginTop: '0.5rem' }}>
+                Assigned: {quantumPanelState.room?.assigned_count ?? '-'} / {quantumPanelState.room?.total_patients ?? '-'}
+              </p>
+            </div>
+
+            <div className="stat-card">
+              <p><strong>Emergency Allocation Panel</strong></p>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={() => runQuantumPanel('emergency')}
+                disabled={quantumPanelState.loading === 'emergency'}
+              >
+                {quantumPanelState.loading === 'emergency' ? 'Running...' : 'Run Quantum Emergency Allocation'}
+              </button>
+              <p style={{ marginTop: '0.5rem' }}>
+                Cases Assigned: {quantumPanelState.emergency?.assigned_count ?? '-'}
+              </p>
+            </div>
+
+            <div className="stat-card">
+              <p><strong>Doctor Shift Panel</strong></p>
+              <button
+                className="outline-button"
+                type="button"
+                onClick={() => runQuantumPanel('doctor')}
+                disabled={quantumPanelState.loading === 'doctor'}
+              >
+                {quantumPanelState.loading === 'doctor' ? 'Running...' : 'Run Quantum Doctor Shift'}
+              </button>
+              <p style={{ marginTop: '0.5rem' }}>
+                Shift Coverage: {quantumPanelState.doctor?.assigned_count ?? '-'} / {quantumPanelState.doctor?.total_shifts ?? '-'}
+              </p>
+            </div>
+          </div>
+
+          <div className="panel-header" style={{ marginTop: '1rem' }}>
+            <div>
+              <h3>Real-time Hospital Resource Optimization</h3>
+              <p className="panel-subtitle">Automatically re-runs quantum optimization for live operational events</p>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                type="checkbox"
+                checked={realTimeEnabled}
+                onChange={(event) => setRealTimeEnabled(event.target.checked)}
+              />
+              Enable real-time optimization
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button className="outline-button" type="button" onClick={() => handleRealtimeEvent('patient-arrival')}>
+              Patient Arrives
+            </button>
+            <button className="outline-button" type="button" onClick={() => handleRealtimeEvent('emergency-occurred')}>
+              Emergency Occurs
+            </button>
+            <button className="outline-button" type="button" onClick={() => handleRealtimeEvent('doctor-unavailable')}>
+              Doctor Unavailable
+            </button>
+          </div>
+
+          <p className="panel-subtitle" style={{ marginTop: '0.75rem' }}>
+            {lastRealtimeAction}
+          </p>
+
+          {quantumPanelState.error ? <p style={{ color: '#b91c1c' }}>{quantumPanelState.error}</p> : null}
         </section>
 
         <section className="panel interactive-video-panel">
