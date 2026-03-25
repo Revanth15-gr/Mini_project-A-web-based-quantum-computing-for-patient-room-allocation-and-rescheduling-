@@ -1,89 +1,277 @@
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
 import EmergencyMap from '../components/EmergencyMap.jsx'
 
+const BASE_LAT = 17.6868
+const BASE_LNG = 83.2185
+
+const CASE_NAMES = [
+  'Emergency Case A',
+  'Emergency Case B',
+  'Emergency Case C',
+  'Emergency Case D',
+  'Emergency Case E',
+]
+
+const LOCATIONS = [
+  'Downtown Vizag',
+  'MVP Colony',
+  'Maddilapalem',
+  'Dwaraka Nagar',
+  'Gajuwaka',
+]
+
+const SEVERITIES = ['Low', 'Medium', 'High', 'Critical']
+
+const FALLBACK_HOSPITALS = [
+  { name: 'Vizag City Care Hospital', lat: 17.723, lng: 83.301, icu_available: 8, doctors_available: 15 },
+  { name: 'Apollo Vizag', lat: 17.705, lng: 83.299, icu_available: 6, doctors_available: 12 },
+  { name: 'KGH Emergency', lat: 17.7125, lng: 83.3136, icu_available: 7, doctors_available: 10 },
+  { name: 'Care Hospitals Vizag', lat: 17.7313, lng: 83.3059, icu_available: 5, doctors_available: 11 },
+]
+
+const DISTRICT_COORDS = [
+  { district: 'Visakhapatnam', keywords: ['vizag', 'visakhapatnam', 'kgh'], lat: 17.6868, lng: 83.2185 },
+  { district: 'Vijayawada', keywords: ['vijayawada'], lat: 16.5062, lng: 80.648 },
+  { district: 'Guntur', keywords: ['guntur'], lat: 16.3067, lng: 80.4365 },
+  { district: 'Kakinada', keywords: ['kakinada'], lat: 16.9891, lng: 82.2475 },
+  { district: 'Rajahmundry', keywords: ['rajahmundry'], lat: 17.0005, lng: 81.804 },
+  { district: 'Machilipatnam', keywords: ['machilipatnam'], lat: 16.1875, lng: 81.1389 },
+  { district: 'Eluru', keywords: ['eluru'], lat: 16.7107, lng: 81.0952 },
+  { district: 'Amalapuram', keywords: ['amalapuram'], lat: 16.5787, lng: 82.0061 },
+  { district: 'Ongole', keywords: ['ongole'], lat: 15.5057, lng: 80.0499 },
+  { district: 'Nellore', keywords: ['nellore'], lat: 14.4426, lng: 79.9865 },
+  { district: 'Tirupati', keywords: ['tirupati'], lat: 13.6288, lng: 79.4192 },
+  { district: 'Anantapur', keywords: ['anantapur'], lat: 14.6819, lng: 77.6006 },
+  { district: 'Kurnool', keywords: ['kurnool'], lat: 15.8281, lng: 78.0373 },
+  { district: 'Kadapa', keywords: ['kadapa'], lat: 14.4673, lng: 78.8242 },
+  { district: 'Chittoor', keywords: ['chittoor'], lat: 13.2172, lng: 79.1003 },
+  { district: 'Nandyal', keywords: ['nandyal'], lat: 15.477, lng: 78.4836 },
+  { district: 'Proddatur', keywords: ['proddatur'], lat: 14.7502, lng: 78.5481 },
+]
+
+function resolveHospitalGeo(name, index = 0) {
+  const lowerName = String(name || '').toLowerCase()
+  const match = DISTRICT_COORDS.find((entry) => entry.keywords.some((keyword) => lowerName.includes(keyword)))
+
+  if (!match) {
+    const fallback = FALLBACK_HOSPITALS[index % FALLBACK_HOSPITALS.length]
+    return {
+      district: 'Visakhapatnam',
+      lat: Number((fallback.lat + index * 0.002).toFixed(6)),
+      lng: Number((fallback.lng + index * 0.0015).toFixed(6)),
+    }
+  }
+
+  return {
+    district: match.district,
+    lat: Number((match.lat + ((index % 3) - 1) * 0.01).toFixed(6)),
+    lng: Number((match.lng + ((index % 3) - 1) * 0.008).toFixed(6)),
+  }
+}
+
+function randomAround(base, maxDelta) {
+  return base + (Math.random() * 2 - 1) * maxDelta
+}
+
+function generateEmergencyCase(idNumber) {
+  const severity = SEVERITIES[Math.floor(Math.random() * SEVERITIES.length)]
+  const name = CASE_NAMES[Math.floor(Math.random() * CASE_NAMES.length)]
+  const location = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)]
+
+  return {
+    id: idNumber,
+    caseId: `EM-${idNumber}`,
+    patientName: name,
+    severity,
+    location,
+    lat: Number(randomAround(BASE_LAT, 0.05).toFixed(6)),
+    lng: Number(randomAround(BASE_LNG, 0.05).toFixed(6)),
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const earthRadiusKm = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2)
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return Number((earthRadiusKm * c).toFixed(2))
+}
+
+function getSeverityColor(severity) {
+  switch ((severity || '').toLowerCase()) {
+    case 'critical':
+      return '#dc2626'
+    case 'high':
+      return '#ea580c'
+    case 'medium':
+      return '#d97706'
+    default:
+      return '#2563eb'
+  }
+}
+
+function formatCountdown(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return '00:00'
+  }
+
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+const TRACKING_FLOW = ['requested', 'accepted', 'arrived', 'pickup', 'dropoff']
+
+const TRACKING_STATE_META = {
+  requested: { label: 'Requested', color: '#0369a1', bg: '#e0f2fe' },
+  accepted: { label: 'Accepted', color: '#1d4ed8', bg: '#dbeafe' },
+  arrived: { label: 'Arrived', color: '#7c3aed', bg: '#ede9fe' },
+  pickup: { label: 'Pickup', color: '#b45309', bg: '#fef3c7' },
+  dropoff: { label: 'Dropoff', color: '#15803d', bg: '#dcfce7' },
+}
+
+const AMBULANCE_STATE_META = {
+  available: { label: 'Available', color: '#166534', bg: '#dcfce7' },
+  requested: { label: 'Requested', color: '#0369a1', bg: '#e0f2fe' },
+  accepted: { label: 'Accepted', color: '#1d4ed8', bg: '#dbeafe' },
+  arrived: { label: 'Arrived at Patient', color: '#7c3aed', bg: '#ede9fe' },
+  pickup: { label: 'Patient Onboard', color: '#b45309', bg: '#fef3c7' },
+  dropoff: { label: 'Dropped at Hospital', color: '#15803d', bg: '#dcfce7' },
+}
+
 function Emergency() {
-  const { hospitals: allHospitals } = useContext(HospitalContext)
-  
-  // State management
-  const [selectedSeverity, setSelectedSeverity] = useState('Critical')
-  const [patientName, setPatientName] = useState('Emergency Patient')
+  const { hospitals: allHospitals = [] } = useContext(HospitalContext)
+
+  const [caseCounter, setCaseCounter] = useState(2)
+  const [incomingCases, setIncomingCases] = useState(() => [generateEmergencyCase(1)])
+  const [activeCaseId, setActiveCaseId] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
   const [assignedHospital, setAssignedHospital] = useState(null)
-  const [nearbyHospitals, setNearbyHospitals] = useState([])
   const [emailSent, setEmailSent] = useState(false)
+  const [trackingId, setTrackingId] = useState(null)
+  const [trackingLive, setTrackingLive] = useState(null)
 
-  // Mock emergency data with coordinates
-  const emergencies = useMemo(
-    () => [
-      {
-        id: 1,
-        patientName,
-        lat: 17.6868,
-        lng: 83.2185,
-        severity: selectedSeverity,
-        location: 'Downtown',
-      },
-    ],
-    [patientName, selectedSeverity]
+  const activeCase = useMemo(
+    () => incomingCases.find((item) => item.id === activeCaseId) || incomingCases[0] || null,
+    [incomingCases, activeCaseId]
   )
 
-  // Mock hospital data with coordinates
   const hospitalPayload = useMemo(() => {
-    const vizagHospitals = [
-      { name: 'Vizag City Care Hospital', lat: 17.723, lng: 83.301, icu_available: 8, doctors_available: 15 },
-      { name: 'Apollo Vizag', lat: 17.705, lng: 83.299, icu_available: 6, doctors_available: 12 },
-      { name: 'Guntur Neuro Center', lat: 17.35, lng: 78.58, icu_available: 5, doctors_available: 10 },
-      { name: 'Vijayawada Heart Institute', lat: 16.5062, lng: 80.648, icu_available: 7, doctors_available: 14 },
-      { name: 'Kakinada Coastal Medical', lat: 16.9891, lng: 82.2475, icu_available: 4, doctors_available: 8 },
-    ]
-    return vizagHospitals.slice(0, 5)
-  }, [])
+    if (!allHospitals.length) {
+      return FALLBACK_HOSPITALS.map((item, idx) => {
+        const geo = resolveHospitalGeo(item.name, idx)
+        return {
+          ...item,
+          district: geo.district,
+          lat: geo.lat,
+          lng: geo.lng,
+        }
+      })
+    }
 
-  // Calculate distance using Haversine formula (mock implementation)
-  const calculateDistance = (lat1, lng1, lat2, lng2) => {
-    const R = 6371 // Earth's radius in km
-    const dLat = ((lat2 - lat1) * Math.PI) / 180
-    const dLng = ((lng2 - lng1) * Math.PI) / 180
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return (R * c).toFixed(2)
-  }
+    return allHospitals.slice(0, 8).map((name, index) => {
+      const geo = resolveHospitalGeo(name, index)
+      return {
+        name,
+        district: geo.district,
+        lat: geo.lat,
+        lng: geo.lng,
+        icu_available: Math.max(2, 10 - index),
+        doctors_available: Math.max(4, 16 - index),
+      }
+    })
+  }, [allHospitals])
 
-  // Calculate nearby hospitals
-  const calculateNearbyHospitals = () => {
-    const em = emergencies[0]
-    const nearby = hospitalPayload
+  const ambulanceUnits = useMemo(() => {
+    return hospitalPayload.slice(0, 6).map((hospital, index) => ({
+      id: `AMB-${String(index + 1).padStart(2, '0')}`,
+      name: `Ambulance ${index + 1}`,
+      district: hospital.district,
+      lat: Number((hospital.lat + 0.006).toFixed(6)),
+      lng: Number((hospital.lng - 0.004).toFixed(6)),
+      status: 'available',
+    }))
+  }, [hospitalPayload])
+
+  const selectedAmbulance = useMemo(() => {
+    if (!activeCase || !ambulanceUnits.length) {
+      return null
+    }
+
+    return [...ambulanceUnits].sort(
+      (a, b) =>
+        haversineDistance(activeCase.lat, activeCase.lng, a.lat, a.lng) -
+        haversineDistance(activeCase.lat, activeCase.lng, b.lat, b.lng)
+    )[0]
+  }, [activeCase, ambulanceUnits])
+
+  const nearbyHospitals = useMemo(() => {
+    if (!activeCase) {
+      return []
+    }
+
+    return hospitalPayload
       .map((hospital) => ({
         ...hospital,
-        distance: calculateDistance(em.lat, em.lng, hospital.lat, hospital.lng),
+        distance: haversineDistance(activeCase.lat, activeCase.lng, hospital.lat, hospital.lng),
       }))
-      .sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance))
-    setNearbyHospitals(nearby)
-    return nearby
+      .sort((a, b) => a.distance - b.distance)
+  }, [activeCase, hospitalPayload])
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setIncomingCases((previous) => {
+        const nextCase = generateEmergencyCase(caseCounter)
+        setActiveCaseId(nextCase.id)
+        setCaseCounter((value) => value + 1)
+        return [nextCase, ...previous].slice(0, 8)
+      })
+    }, 18000)
+
+    return () => clearInterval(intervalId)
+  }, [caseCounter])
+
+  const createIncomingCaseNow = () => {
+    const nextCase = generateEmergencyCase(caseCounter)
+    setCaseCounter((value) => value + 1)
+    setIncomingCases((previous) => [nextCase, ...previous].slice(0, 8))
+    setActiveCaseId(nextCase.id)
   }
 
   const handleAssignEmergencyHospital = async () => {
+    if (!activeCase) {
+      setError('No active emergency case available for assignment')
+      return
+    }
+
     setLoading(true)
     setError('')
     setEmailSent(false)
 
     try {
-      // Calculate nearby hospitals first
-      const nearby = calculateNearbyHospitals()
-
       const payload = {
-        emergencies: emergencies.map((em) => ({
-          patient_id: `EM-${Date.now()}`,
-          patient_name: em.patientName,
-          location: em.location,
-          severity: em.severity.toLowerCase(),
-          latitude: em.lat,
-          longitude: em.lng,
-        })),
-        hospitals: nearby,
+        emergencies: [
+          {
+            patient_id: activeCase.caseId,
+            patient_name: activeCase.patientName,
+            location: activeCase.location,
+            severity: activeCase.severity.toLowerCase(),
+            latitude: activeCase.lat,
+            longitude: activeCase.lng,
+          },
+        ],
+        hospitals: nearbyHospitals,
       }
 
       const response = await fetch('/api/quantum-emergency', {
@@ -99,17 +287,14 @@ function Emergency() {
 
       setResult(data)
 
-      // Set assigned hospital (first from result or nearest)
-      if (data.assignments?.length > 0) {
-        setAssignedHospital(data.assignments[0].hospital || nearby[0].name)
-      } else {
-        setAssignedHospital(nearby[0].name)
-      }
+      const resolvedHospital = data.assignments?.[0]?.hospital || nearbyHospitals[0]?.name || null
+      setAssignedHospital(resolvedHospital)
+      setTrackingId(data?.tracking?.trackingId || null)
+      setTrackingLive(data?.tracking || null)
 
-      // Simulate email sending
       setTimeout(() => {
         setEmailSent(true)
-      }, 1000)
+      }, 600)
     } catch (requestError) {
       setError(requestError.message || 'Unable to assign emergency hospital')
     } finally {
@@ -117,488 +302,336 @@ function Emergency() {
     }
   }
 
-  const getSeverityColor = (severity) => {
-    switch (severity?.toLowerCase()) {
-      case 'critical':
-        return '#dc2626'
-      case 'high':
-        return '#ea580c'
-      case 'medium':
-        return '#f59e0b'
-      default:
-        return '#3b82f6'
+  useEffect(() => {
+    if (!trackingId) {
+      return undefined
     }
-  }
+
+    let active = true
+    const pollTracking = async () => {
+      try {
+        const response = await fetch(`/api/quantum-tracking/${trackingId}`)
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(payload.error || `Tracking API returned ${response.status}`)
+        }
+
+        if (active) {
+          setTrackingLive(payload)
+        }
+      } catch {
+        // Keep UI stable on intermittent network issues.
+      }
+    }
+
+    pollTracking()
+    const pollId = setInterval(pollTracking, 2000)
+
+    return () => {
+      active = false
+      clearInterval(pollId)
+    }
+  }, [trackingId])
+
+  const assignedHospitalDetails = useMemo(
+    () => nearbyHospitals.find((hospital) => hospital.name === assignedHospital) || null,
+    [nearbyHospitals, assignedHospital]
+  )
+
+  const criticalTracking = useMemo(() => {
+    if (!activeCase || String(activeCase.severity).toLowerCase() !== 'critical') {
+      return null
+    }
+
+    const distance = Number(assignedHospitalDetails?.distance || 0)
+    const etaMinutes = distance > 0 ? Math.max(3, Math.ceil((distance / 45) * 60)) : '-'
+    const backendState = trackingLive?.state || null
+    const backendStatus = trackingLive?.statusText || null
+
+    return {
+      active: true,
+      provider: 'Uber EMS Partner',
+      vehicleId: selectedAmbulance?.id || `UB-EMS-${String(activeCase.id).padStart(3, '0')}`,
+      status: backendStatus || (assignedHospital ? 'Driver matched, ambulance in transit' : 'Searching nearby ambulances'),
+      state: backendState || 'requested',
+      etaMinutes: trackingLive?.state === 'dropoff' ? 0 : etaMinutes,
+      distance,
+      progress: typeof trackingLive?.progress === 'number' ? trackingLive.progress : 0,
+      ambulanceDistrict: selectedAmbulance?.district || null,
+    }
+  }, [activeCase, assignedHospital, assignedHospitalDetails, trackingLive, selectedAmbulance])
+
+  const trackingRemainingMs = useMemo(() => {
+    const ttlMs = Number(trackingLive?.ttlMs)
+    const elapsedMs = Number(trackingLive?.elapsedMs)
+
+    if (!Number.isFinite(ttlMs) || !Number.isFinite(elapsedMs)) {
+      return null
+    }
+
+    return Math.max(0, ttlMs - elapsedMs)
+  }, [trackingLive])
+
+  const trackingStateIndex = useMemo(() => {
+    if (!criticalTracking?.state) {
+      return -1
+    }
+    return TRACKING_FLOW.indexOf(criticalTracking.state)
+  }, [criticalTracking])
+
+  const ambulanceLiveList = useMemo(() => {
+    return ambulanceUnits.map((unit) => {
+      const isSelected = unit.id === (selectedAmbulance?.id || null)
+      const currentState = isSelected ? (trackingLive?.state || 'requested') : 'available'
+      const meta = AMBULANCE_STATE_META[currentState] || AMBULANCE_STATE_META.available
+
+      return {
+        ...unit,
+        isSelected,
+        stateKey: currentState,
+        statusLabel: meta.label,
+        statusColor: meta.color,
+        statusBg: meta.bg,
+      }
+    })
+  }, [ambulanceUnits, selectedAmbulance, trackingLive])
 
   return (
     <div className="page-grid">
-      {/* Main Control Panel */}
-      <section className="panel">
+      <section className="panel" style={{ gridColumn: '1 / -1' }}>
         <div className="panel-header">
           <div>
-            <h3>🚑 Quantum Emergency Allocation Command Center</h3>
-            <p className="panel-subtitle">Real-time emergency routing with quantum optimization</p>
-          </div>
-          <button className="primary-button" type="button" onClick={handleAssignEmergencyHospital} disabled={loading}>
-            {loading ? 'Assigning...' : 'Assign Nearest Hospital'}
-          </button>
-        </div>
-
-        {/* Emergency Input Section */}
-        <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(76, 141, 255, 0.05)', borderRadius: '8px', border: '1px solid rgba(76, 141, 255, 0.2)' }}>
-          <h4 style={{ marginBottom: '1rem', fontSize: '0.95rem', fontWeight: '600' }}>Emergency Details</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '500' }}>
-                Patient Name
-              </label>
-              <input
-                type="text"
-                value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
-                placeholder="Enter patient name"
-                style={{
-                  width: '100%',
-                  padding: '0.6rem',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(76, 141, 255, 0.2)',
-                  fontSize: '0.9rem',
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '500' }}>
-                Severity Level
-              </label>
-              <select
-                value={selectedSeverity}
-                onChange={(e) => setSelectedSeverity(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(76, 141, 255, 0.2)',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div className="stats-row">
-          <div className="stat-card">
-            <p>
-              <strong>Severity:</strong> <span style={{ color: getSeverityColor(selectedSeverity) }}>●</span> {selectedSeverity}
-            </p>
-          </div>
-          <div className="stat-card">
-            <p>
-              <strong>Hospitals Available:</strong> {hospitalPayload.length}
-            </p>
-          </div>
-          <div className="stat-card">
-            <p>
-              <strong>Nearby Count:</strong> {nearbyHospitals.length}
-            </p>
-          </div>
-          <div className="stat-card">
-            <p>
-              <strong>Assigned:</strong> {assignedHospital ? '✓ Yes' : '✗ No'}
-            </p>
-          </div>
-        </div>
-
-        {error && <p style={{ color: '#b91c1c', marginTop: '0.75rem', fontWeight: '500' }}>⚠️ {error}</p>}
-
-        {emailSent && (
-          <p style={{ color: '#15803d', marginTop: '0.75rem', fontWeight: '500' }}>
-            ✓ Email notification sent to assigned hospital
-          </p>
-        )}
-      </section>
-
-      {/* Emergency Map Visualization - Main Focus */}
-      <section className="panel" style={{ gridColumn: '1 / -1' }}>
-        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h2 style={{ marginBottom: '0.25rem', fontSize: '1.3rem' }}>📍 Emergency Map & Hospital Locations</h2>
-            <p style={{ margin: '0', fontSize: '0.9rem', color: '#6b7280' }}>Real-time visualization of emergency and nearby hospitals</p>
+            <h3>Quantum Emergency Allocation Command Center</h3>
+            <p className="panel-subtitle">Incoming cases are auto-detected. No manual case entry required.</p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: '1px solid rgba(76, 141, 255, 0.2)',
-                backgroundColor: '#f0f5ff',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-              }}
-              onClick={() => calculateNearbyHospitals()}
-            >
-              🔄 Refresh Map
+            <button className="primary-button" type="button" onClick={createIncomingCaseNow}>
+              Simulate Incoming Case
+            </button>
+            <button className="primary-button" type="button" onClick={handleAssignEmergencyHospital} disabled={loading || !activeCase}>
+              {loading ? 'Assigning...' : 'Assign Nearest Hospital'}
             </button>
           </div>
         </div>
 
-        {/* Map Section */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', position: 'relative' }}>
-          {/* Map Container */}
-          <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', backgroundColor: '#fff' }}>
-            <EmergencyMap emergencies={emergencies} hospitals={hospitalPayload} assignedHospital={assignedHospital} />
+        <div className="stats-row">
+          <div className="stat-card">
+            <p><strong>Auto Incoming Queue:</strong> {incomingCases.length}</p>
           </div>
-
-          {/* Map Info Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Emergency Location Card */}
-            <div style={{
-              padding: '1rem',
-              borderRadius: '8px',
-              border: '2px solid #dc2626',
-              backgroundColor: '#fef2f2',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '1.5rem' }}>🚑</span>
-                <h4 style={{ margin: '0', fontSize: '0.95rem', fontWeight: '600' }}>Emergency Location</h4>
-              </div>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                <strong>Patient:</strong> {patientName}
-              </p>
-              <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                <strong>Severity:</strong> <span style={{ color: getSeverityColor(selectedSeverity), fontWeight: 'bold' }}>● {selectedSeverity}</span>
-              </p>
-              <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                <strong>Coordinates:</strong> 17.69°N, 83.22°E
-              </p>
-            </div>
-
-            {/* Assigned Hospital Card */}
-            {assignedHospital && (
-              <div style={{
-                padding: '1rem',
-                borderRadius: '8px',
-                border: '2px solid #15803d',
-                backgroundColor: '#f0fdf4',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>✓</span>
-                  <h4 style={{ margin: '0', fontSize: '0.95rem', fontWeight: '600', color: '#15803d' }}>Assigned Hospital</h4>
-                </div>
-                {nearbyHospitals.length > 0 && nearbyHospitals[0].name === assignedHospital && (
-                  <>
-                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                      <strong>Hospital:</strong> {assignedHospital}
-                    </p>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                      <strong>Distance:</strong> <span style={{ color: '#15803d', fontWeight: 'bold' }}>{nearbyHospitals[0].distance} km</span>
-                    </p>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                      <strong>ICU Beds:</strong> {nearbyHospitals[0].icu_available}
-                    </p>
-                    <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-                      <strong>ETA:</strong> ~{Math.ceil((parseFloat(nearbyHospitals[0].distance) / 50) * 60)} min
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Map Legend */}
-            <div style={{
-              padding: '1rem',
-              borderRadius: '8px',
-              border: '1px solid rgba(76, 141, 255, 0.2)',
-              backgroundColor: 'rgba(76, 141, 255, 0.05)',
-            }}>
-              <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', fontWeight: '600' }}>Map Legend</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#dc2626' }} />
-                  <span>Emergency Location</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#4c8dff' }} />
-                  <span>Hospital</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#15803d' }} />
-                  <span>Assigned</span>
-                </div>
-              </div>
-            </div>
+          <div className="stat-card">
+            <p><strong>Hospitals Tracked:</strong> {hospitalPayload.length}</p>
+          </div>
+          <div className="stat-card">
+            <p><strong>Active Severity:</strong> <span style={{ color: getSeverityColor(activeCase?.severity) }}>{activeCase?.severity || '-'}</span></p>
+          </div>
+          <div className="stat-card">
+            <p><strong>Assigned:</strong> {assignedHospital || 'Pending'}</p>
           </div>
         </div>
+
+        <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          {incomingCases.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveCaseId(item.id)}
+              style={{
+                textAlign: 'left',
+                border: item.id === activeCaseId ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                borderRadius: '10px',
+                background: item.id === activeCaseId ? '#eff6ff' : '#fff',
+                padding: '0.8rem',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>{item.caseId}</div>
+              <div>{item.patientName}</div>
+              <div style={{ fontSize: '0.85rem', color: '#475569' }}>{item.location}</div>
+              <div style={{ marginTop: '0.25rem', color: getSeverityColor(item.severity), fontWeight: 600 }}>{item.severity}</div>
+            </button>
+          ))}
+        </div>
+
+        {error ? <p style={{ color: '#b91c1c', marginTop: '0.75rem' }}>{error}</p> : null}
+        {emailSent ? <p style={{ color: '#15803d', marginTop: '0.75rem' }}>Notification sent to assigned hospital</p> : null}
       </section>
 
-      {/* Nearby Hospitals Section */}
-      {nearbyHospitals.length > 0 && (
-        <section className="panel" style={{ gridColumn: '1 / -1' }}>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <h2 style={{ marginBottom: '0.5rem', fontSize: '1.2rem' }}>🏥 Nearby Hospitals - Priority Ranking</h2>
-            <p style={{ margin: '0', fontSize: '0.9rem', color: '#6b7280' }}>Hospitals ranked by distance and resource availability for optimal emergency response</p>
+      <section className="panel" style={{ gridColumn: '1 / -1' }}>
+        <h3 style={{ marginBottom: '0.5rem' }}>Emergency Map & Hospital Locations</h3>
+        <p className="panel-subtitle" style={{ marginBottom: '1rem' }}>Live map view for active emergency case and nearest hospitals</p>
+
+        <EmergencyMap
+          emergency={activeCase}
+          hospitals={nearbyHospitals}
+          assignedHospital={assignedHospital}
+          trackingState={trackingLive?.state || null}
+          trackingProgress={typeof trackingLive?.progress === 'number' ? trackingLive.progress : null}
+          ambulanceUnits={ambulanceUnits}
+          selectedAmbulanceId={selectedAmbulance?.id || null}
+        />
+
+        <div
+          style={{
+            marginTop: '1rem',
+            border: '1px solid #cbd5e1',
+            borderRadius: '10px',
+            background: '#f8fafc',
+            padding: '0.85rem 0.95rem',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Ambulance Live Status</h4>
+            <span style={{ fontSize: '0.78rem', color: '#475569' }}>
+              Total Units: {ambulanceLiveList.length}
+            </span>
           </div>
 
-          {/* Hospitals Grid View */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: '1rem',
-          }}>
-            {nearbyHospitals.map((hospital, index) => {
-              const isAssigned = hospital.name === assignedHospital
-              const rankBadgeColor = index === 0 ? '#dc2626' : index === 1 ? '#f59e0b' : '#6b7280'
-              const etaMinutes = Math.ceil((parseFloat(hospital.distance) / 50) * 60)
-
-              return (
-                <article
-                  key={`hospital-${index}`}
-                  style={{
-                    border: isAssigned ? '2px solid #15803d' : '1px solid #e5e7eb',
-                    borderRadius: '10px',
-                    padding: '1.25rem',
-                    backgroundColor: isAssigned ? '#f0fdf4' : '#fff',
-                    transition: 'all 0.3s ease',
-                    boxShadow: isAssigned ? '0 4px 12px rgba(21, 128, 61, 0.1)' : '0 2px 8px rgba(0,0,0,0.05)',
-                    position: 'relative',
-                  }}
-                >
-                  {/* Rank Badge */}
-                  <div
+          <div style={{ display: 'grid', gap: '0.55rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            {ambulanceLiveList.map((unit) => (
+              <div
+                key={unit.id}
+                style={{
+                  border: unit.isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                  borderRadius: '9px',
+                  background: unit.isSelected ? '#eff6ff' : '#ffffff',
+                  padding: '0.65rem 0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.6rem' }}>
+                  <div style={{ fontWeight: 700 }}>{unit.id}</div>
+                  <span
                     style={{
-                      position: 'absolute',
-                      top: '1rem',
-                      right: '1rem',
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      backgroundColor: rankBadgeColor,
-                      color: '#fff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem',
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      color: unit.statusColor,
+                      background: unit.statusBg,
                     }}
                   >
-                    {index + 1}
-                  </div>
-
-                  {/* Assigned Badge */}
-                  {isAssigned && (
-                    <div
-                      style={{
-                        display: 'inline-block',
-                        backgroundColor: '#15803d',
-                        color: '#fff',
-                        padding: '0.3rem 0.8rem',
-                        borderRadius: '20px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        marginBottom: '0.75rem',
-                      }}
-                    >
-                      ✓ ASSIGNED
-                    </div>
-                  )}
-
-                  {/* Hospital Name */}
-                  <h3 style={{
-                    marginBottom: '0.75rem',
-                    fontSize: '1.05rem',
-                    fontWeight: '600',
-                    color: isAssigned ? '#15803d' : '#164a8a',
-                    marginTop: isAssigned ? '0.5rem' : '0',
-                  }}>
-                    {hospital.name}
-                  </h3>
-
-                  {/* Key Metrics */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '0.75rem',
-                    marginBottom: '1rem',
-                    paddingBottom: '1rem',
-                    borderBottom: '1px solid rgba(0,0,0,0.05)',
-                  }}>
-                    <div>
-                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#6b7280', fontWeight: '500' }}>Distance</p>
-                      <p style={{
-                        margin: '0.25rem 0 0 0',
-                        fontSize: '1.1rem',
-                        fontWeight: 'bold',
-                        color: hospital.distance < 5 ? '#15803d' : hospital.distance < 10 ? '#f59e0b' : '#6b7280',
-                      }}>
-                        {hospital.distance} km
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#6b7280', fontWeight: '500' }}>ETA</p>
-                      <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.1rem', fontWeight: 'bold', color: '#164a8a' }}>
-                        ~{etaMinutes} min
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#6b7280', fontWeight: '500' }}>🛏️ ICU Beds</p>
-                      <p style={{
-                        margin: '0.25rem 0 0 0',
-                        fontSize: '1rem',
-                        fontWeight: 'bold',
-                        color: hospital.icu_available >= 6 ? '#15803d' : hospital.icu_available >= 4 ? '#f59e0b' : '#dc2626',
-                      }}>
-                        {hospital.icu_available} available
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ margin: '0', fontSize: '0.8rem', color: '#6b7280', fontWeight: '500' }}>👨‍⚕️ Doctors</p>
-                      <p style={{
-                        margin: '0.25rem 0 0 0',
-                        fontSize: '1rem',
-                        fontWeight: 'bold',
-                        color: hospital.doctors_available >= 12 ? '#15803d' : hospital.doctors_available >= 8 ? '#f59e0b' : '#dc2626',
-                      }}>
-                        {hospital.doctors_available}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Resource Status */}
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        padding: '0.4rem 0.8rem',
-                        borderRadius: '6px',
-                        backgroundColor: hospital.icu_available >= 6 ? 'rgba(21, 128, 61, 0.1)' : 'rgba(241, 169, 20, 0.1)',
-                        fontSize: '0.8rem',
-                        fontWeight: '500',
-                        color: hospital.icu_available >= 6 ? '#15803d' : '#d97706',
-                      }}
-                    >
-                      {hospital.icu_available >= 6 ? '✓' : '⚠'} ICU {hospital.icu_available >= 6 ? 'Available' : 'Low'}
-                    </span>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        padding: '0.4rem 0.8rem',
-                        borderRadius: '6px',
-                        backgroundColor: hospital.distance < 5 ? 'rgba(21, 128, 61, 0.1)' : 'rgba(241, 169, 20, 0.1)',
-                        fontSize: '0.8rem',
-                        fontWeight: '500',
-                        color: hospital.distance < 5 ? '#15803d' : '#d97706',
-                      }}
-                    >
-                      {hospital.distance < 5 ? '✓ Near' : '📍'} {hospital.distance} km
-                    </span>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-
-          {/* Comparison Table */}
-          <div style={{ marginTop: '2rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: '600' }}>Detailed Comparison</h3>
-            <div style={{
-              overflowX: 'auto',
-              borderRadius: '8px',
-              border: '1px solid #e5e7eb',
-              backgroundColor: '#f9fafb',
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: 'rgba(76, 141, 255, 0.1)', borderBottom: '2px solid #e5e7eb' }}>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>Rank</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600' }}>Hospital Name</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600' }}>Distance (km)</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600' }}>ETA (min)</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600' }}>ICU Beds</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600' }}>Doctors</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nearbyHospitals.map((hospital, index) => (
-                    <tr
-                      key={`table-${index}`}
-                      style={{
-                        borderBottom: '1px solid #e5e7eb',
-                        backgroundColor: hospital.name === assignedHospital ? 'rgba(21, 128, 61, 0.05)' : index % 2 === 0 ? '#fff' : '#f9fafb',
-                      }}
-                    >
-                      <td style={{ padding: '0.75rem', fontWeight: 'bold', color: '#164a8a' }}>{index + 1}</td>
-                      <td style={{ padding: '0.75rem', fontWeight: hospital.name === assignedHospital ? '600' : '500' }}>
-                        {hospital.name}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#15803d' }}>
-                        {hospital.distance}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: '#164a8a' }}>
-                        {Math.ceil((parseFloat(hospital.distance) / 50) * 60)}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: hospital.icu_available >= 6 ? '#15803d' : '#dc2626' }}>
-                        {hospital.icu_available}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: hospital.doctors_available >= 12 ? '#15803d' : '#f59e0b' }}>
-                        {hospital.doctors_available}
-                      </td>
-                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                        {hospital.name === assignedHospital ? (
-                          <span style={{ color: '#15803d', fontWeight: 'bold' }}>✓ ASSIGNED</span>
-                        ) : (
-                          <span style={{ color: '#6b7280' }}>—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Optimization Result */}
-      {result?.assignments?.length && (
-        <section className="panel">
-          <h3 style={{ marginBottom: '1rem' }}>⚡ Quantum Optimization Result</h3>
-          <div className="card-grid">
-            {result.assignments.map((item, index) => (
-              <article key={`result-${index}`} className="room-card">
-                <div className="room-head">
-                  <h4>Emergency Case #{index + 1}</h4>
-                  <span className="badge">Optimized</span>
+                    {unit.statusLabel}
+                  </span>
                 </div>
-                <p className="room-meta"><strong>Hospital:</strong> {item.hospital}</p>
-                <p className="room-meta"><strong>Distance:</strong> {item.distance_km ?? '-'} km</p>
-                <p className="room-meta"><strong>Algorithm:</strong> {result.algorithm || 'QAOA + Grover'}</p>
-                {result.optimization_score !== undefined && (
-                  <p className="room-meta"><strong>Optimization Score:</strong> {(result.optimization_score * 100).toFixed(1)}%</p>
-                )}
-              </article>
+                <div style={{ marginTop: '0.25rem', fontSize: '0.82rem', color: '#334155' }}>{unit.name}</div>
+                <div style={{ marginTop: '0.2rem', fontSize: '0.78rem', color: '#64748b' }}>District: {unit.district || '-'}</div>
+                <div style={{ marginTop: '0.2rem', fontSize: '0.78rem', color: '#64748b' }}>
+                  Coords: {unit.lat}, {unit.lng}
+                </div>
+                {unit.isSelected ? (
+                  <div style={{ marginTop: '0.35rem', fontSize: '0.78rem', fontWeight: 700, color: '#1d4ed8' }}>
+                    Active unit for current emergency
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
+        </div>
 
-          {result.optimization_score !== undefined && (
-            <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'rgba(76, 141, 255, 0.1)', borderRadius: '8px' }}>
-              <p style={{ margin: '0', fontSize: '0.9rem' }}>
-                <strong>📊 Algorithm:</strong> {result.algorithm || 'QAOA Emergency Optimization'} | <strong>Quality:</strong> {(result.optimization_score * 100).toFixed(1)}% | <strong>Cases:</strong> {result.assigned_count}/{result.total_cases}
-              </p>
+        {criticalTracking ? (
+          <div
+            style={{
+              marginTop: '1rem',
+              border: '1px solid #bfdbfe',
+              background: '#eff6ff',
+              borderRadius: '10px',
+              padding: '0.9rem 1rem',
+            }}
+          >
+            <div style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: '0.35rem' }}>
+              Critical Live Tracking: Uber-style Ambulance Dispatch
             </div>
-          )}
+            <div style={{ display: 'grid', gap: '0.35rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+              <div><strong>Provider:</strong> {criticalTracking.provider}</div>
+              <div><strong>Vehicle:</strong> {criticalTracking.vehicleId}</div>
+              <div><strong>Ambulance District:</strong> {criticalTracking.ambulanceDistrict || '-'}</div>
+              <div><strong>Status:</strong> {criticalTracking.status}</div>
+              <div><strong>ETA:</strong> {criticalTracking.etaMinutes === '-' ? '-' : `${criticalTracking.etaMinutes} min`}</div>
+              <div><strong>Tracking State:</strong> {criticalTracking.state}</div>
+              <div><strong>Progress:</strong> {(criticalTracking.progress * 100).toFixed(0)}%</div>
+              {trackingRemainingMs !== null ? (
+                <div>
+                  <strong>Tracking Expires In:</strong>{' '}
+                  <span style={{ color: trackingRemainingMs < 5 * 60 * 1000 ? '#b91c1c' : '#0f172a', fontWeight: 700 }}>
+                    {formatCountdown(trackingRemainingMs)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ marginTop: '0.8rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+              {TRACKING_FLOW.map((stateKey, idx) => {
+                const meta = TRACKING_STATE_META[stateKey]
+                const isReached = trackingStateIndex >= idx
+                const isCurrent = criticalTracking.state === stateKey
+
+                return (
+                  <span
+                    key={stateKey}
+                    style={{
+                      padding: '0.3rem 0.65rem',
+                      borderRadius: '999px',
+                      fontSize: '0.78rem',
+                      fontWeight: isCurrent ? 800 : 600,
+                      color: isReached ? meta.color : '#64748b',
+                      background: isReached ? meta.bg : '#f1f5f9',
+                      border: isCurrent ? `2px solid ${meta.color}` : '1px solid #cbd5e1',
+                    }}
+                  >
+                    {meta.label}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="panel" style={{ gridColumn: '1 / -1' }}>
+        <h3 style={{ marginBottom: '1rem' }}>Nearby Hospitals</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#eff6ff' }}>
+                <th style={{ textAlign: 'left', padding: '0.7rem' }}>Hospital</th>
+                <th style={{ textAlign: 'left', padding: '0.7rem' }}>District</th>
+                <th style={{ textAlign: 'left', padding: '0.7rem' }}>Distance (km)</th>
+                <th style={{ textAlign: 'left', padding: '0.7rem' }}>ICU</th>
+                <th style={{ textAlign: 'left', padding: '0.7rem' }}>Doctors</th>
+                <th style={{ textAlign: 'left', padding: '0.7rem' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nearbyHospitals.map((hospital) => (
+                <tr key={hospital.name} style={{ borderTop: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '0.7rem' }}>{hospital.name}</td>
+                  <td style={{ padding: '0.7rem' }}>{hospital.district || '-'}</td>
+                  <td style={{ padding: '0.7rem' }}>{hospital.distance}</td>
+                  <td style={{ padding: '0.7rem' }}>{hospital.icu_available}</td>
+                  <td style={{ padding: '0.7rem' }}>{hospital.doctors_available}</td>
+                  <td style={{ padding: '0.7rem', color: hospital.name === assignedHospital ? '#15803d' : '#64748b', fontWeight: hospital.name === assignedHospital ? 700 : 500 }}>
+                    {hospital.name === assignedHospital ? 'Assigned' : 'Candidate'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {assignedHospitalDetails ? (
+          <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <strong>Assigned Hospital:</strong> {assignedHospitalDetails.name} | <strong>Distance:</strong> {assignedHospitalDetails.distance} km
+          </div>
+        ) : null}
+      </section>
+
+      {result?.assignments?.length ? (
+        <section className="panel" style={{ gridColumn: '1 / -1' }}>
+          <h3 style={{ marginBottom: '0.75rem' }}>Quantum Optimization Result</h3>
+          <p><strong>Algorithm:</strong> {result.algorithm || 'QAOA + Grover'}</p>
+          <p><strong>Score:</strong> {result.optimization_score !== undefined ? `${(result.optimization_score * 100).toFixed(1)}%` : '-'}</p>
+          <p><strong>Cases:</strong> {result.assigned_count}/{result.total_cases}</p>
         </section>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:gateway": "node backend/gateway/server.js",
-    "dev:qaoa": "py -3.11 -m uvicorn main:app --reload --app-dir backend/qaoa-service",
+    "dev:qaoa": "\".\\backend\\qaoa-service\\.venv\\Scripts\\python.exe\" -m uvicorn main:app --reload --app-dir .\\backend\\qaoa-service",
     "dev:all": "concurrently -k -n WEB,GATEWAY,QAOA -c cyan,magenta,green \"npm run dev\" \"npm run dev:gateway\" \"npm run dev:qaoa\"",
     "build": "npm --prefix backend/gateway install && npx vite build",
     "postinstall": "npm --prefix backend/gateway install && py -m pip install -r backend/qaoa-service/requirements.txt",
@@ -20,6 +20,7 @@
     "leaflet-defaulticon-compatibility": "^0.1.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^6.30.1"
   },
   "devDependencies": {

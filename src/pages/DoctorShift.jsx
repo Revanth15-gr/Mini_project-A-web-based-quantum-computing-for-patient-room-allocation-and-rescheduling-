@@ -1,5 +1,23 @@
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useState } from 'react'
 import { HospitalContext } from '../state/HospitalContext.jsx'
+
+const DOCTOR_SHIFT_CACHE_KEY = 'quantumDoctorShiftSchedules'
+
+function readDoctorShiftCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DOCTOR_SHIFT_CACHE_KEY) || '{}')
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function buildScheduleCacheKey(hospital, date) {
+  if (!hospital || !date) {
+    return ''
+  }
+  return `${hospital}::${date}`
+}
 
 function DoctorShift() {
   const { doctors, hospitals = [] } = useContext(HospitalContext)
@@ -8,6 +26,7 @@ function DoctorShift() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
+  const [scheduleSource, setScheduleSource] = useState('')
 
   const hospitalList = useMemo(() => {
     const uniqueHospitals = [...new Set(doctors.map((d) => d.hospital).filter(Boolean))]
@@ -28,14 +47,53 @@ function DoctorShift() {
     []
   )
 
+  const cacheKey = useMemo(
+    () => buildScheduleCacheKey(selectedHospital, selectedDate),
+    [selectedHospital, selectedDate]
+  )
+
+  useEffect(() => {
+    setError('')
+
+    if (!cacheKey) {
+      setResult(null)
+      setScheduleSource('')
+      return
+    }
+
+    const cache = readDoctorShiftCache()
+    const cachedItem = cache[cacheKey]
+
+    if (cachedItem?.result) {
+      setResult(cachedItem.result)
+      setScheduleSource('cached')
+      return
+    }
+
+    setResult(null)
+    setScheduleSource('')
+  }, [cacheKey])
+
   const handleGenerateSchedule = async () => {
+    if (cacheKey) {
+      const cache = readDoctorShiftCache()
+      const cachedItem = cache[cacheKey]
+      if (cachedItem?.result) {
+        setResult(cachedItem.result)
+        setScheduleSource('cached')
+        setError('')
+        return
+      }
+    }
+
     setLoading(true)
     setError('')
 
     try {
+      const effectiveDate = selectedDate || new Date().toISOString().split('T')[0]
       const payload = {
         hospital: selectedHospital,
-        date: selectedDate,
+        date: effectiveDate,
         doctors: hospitalDoctors.map((doctor) => ({
           id: doctor.id,
           name: doctor.name,
@@ -65,11 +123,41 @@ function DoctorShift() {
       }
 
       setResult(data)
+      if (cacheKey) {
+        const cache = readDoctorShiftCache()
+        cache[cacheKey] = {
+          generatedAt: new Date().toISOString(),
+          result: data,
+        }
+        localStorage.setItem(DOCTOR_SHIFT_CACHE_KEY, JSON.stringify(cache))
+        setScheduleSource('fresh')
+      } else {
+        setScheduleSource('fresh')
+      }
     } catch (requestError) {
       setError(requestError.message || 'Unable to generate quantum doctor schedule')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleResetScheduleForDate = () => {
+    if (!cacheKey) {
+      setResult(null)
+      setScheduleSource('')
+      setError('')
+      return
+    }
+
+    const cache = readDoctorShiftCache()
+    if (cache[cacheKey]) {
+      delete cache[cacheKey]
+      localStorage.setItem(DOCTOR_SHIFT_CACHE_KEY, JSON.stringify(cache))
+    }
+
+    setResult(null)
+    setScheduleSource('')
+    setError('Cached schedule cleared. Click Generate to create a fresh quantum schedule.')
   }
 
   return (
@@ -80,9 +168,19 @@ function DoctorShift() {
             <h3>🏥 Quantum Doctor Shift Allocation</h3>
             <p className="panel-subtitle">Morning, Afternoon, and Night shift optimization</p>
           </div>
-          <button className="primary-button" type="button" onClick={handleGenerateSchedule} disabled={loading || !selectedHospital}>
-            {loading ? 'Generating...' : 'Generate Quantum Doctor Schedule'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button
+              className="outline-button"
+              type="button"
+              onClick={handleResetScheduleForDate}
+              disabled={loading}
+            >
+              Reset Schedule for this Date
+            </button>
+            <button className="primary-button" type="button" onClick={handleGenerateSchedule} disabled={loading || !selectedHospital}>
+              {loading ? 'Generating...' : 'Generate Quantum Doctor Schedule'}
+            </button>
+          </div>
         </div>
 
         {/* Hospital & Date Selectors */}
@@ -133,12 +231,22 @@ function DoctorShift() {
 
         <div className="stats-row">
           <div className="stat-card"><p><strong>Hospital:</strong> {selectedHospital}</p></div>
-          <div className="stat-card"><p><strong>Date:</strong> {new Date(selectedDate).toLocaleDateString()}</p></div>
+          <div className="stat-card"><p><strong>Date:</strong> {selectedDate ? new Date(selectedDate).toLocaleDateString() : 'Not selected (fresh each run)'}</p></div>
           <div className="stat-card"><p><strong>Available Doctors:</strong> {hospitalDoctors.length}</p></div>
           <div className="stat-card"><p><strong>Shifts to Fill:</strong> 3</p></div>
         </div>
 
         {error ? <p style={{ color: '#b91c1c', marginTop: '0.75rem', fontWeight: '500' }}>⚠️ {error}</p> : null}
+        {scheduleSource === 'cached' ? (
+          <p style={{ color: '#1d4ed8', marginTop: '0.75rem', fontWeight: '500' }}>
+            Reusing previously generated schedule for this hospital and date.
+          </p>
+        ) : null}
+        {scheduleSource === 'fresh' ? (
+          <p style={{ color: '#15803d', marginTop: '0.75rem', fontWeight: '500' }}>
+            Fresh quantum schedule generated.
+          </p>
+        ) : null}
 
         {result?.assignments?.length ? (
           <div style={{ marginTop: '1.5rem' }}>

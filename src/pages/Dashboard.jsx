@@ -141,6 +141,98 @@ function getAssignmentPatientName(item) {
   return item?.patientName || item?.patient || item?.label || item?.name || ''
 }
 
+function toFiniteNumber(value, fallback = null) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : fallback
+}
+
+function normalizeAssignmentItem(item, index = 0) {
+  return {
+    ...item,
+    patientName: getAssignmentPatientName(item) || `Patient ${index + 1}`,
+    room: item?.room ?? item?.assignedRoom ?? item?.room_id ?? null,
+  }
+}
+
+function normalizeQaoaResult(payload) {
+  const source = payload?.result && typeof payload.result === 'object' ? payload.result : payload
+  const rawAssignments = Array.isArray(source?.assignments) ? source.assignments : []
+
+  let rawProbabilities = source?.probabilities
+  if (!Array.isArray(rawProbabilities) && rawProbabilities && typeof rawProbabilities === 'object') {
+    rawProbabilities = Object.entries(rawProbabilities).map(([label, probability]) => ({
+      label,
+      probability,
+    }))
+  }
+
+  return {
+    ...source,
+    solver: source?.solver || payload?.solver || 'qaoa',
+    cost: toFiniteNumber(
+      source?.cost ?? source?.objectiveValue ?? source?.total_cost ?? source?.optimization_score,
+      null
+    ),
+    assignments: rawAssignments.map((item, index) => normalizeAssignmentItem(item, index)),
+    probabilities: Array.isArray(rawProbabilities)
+      ? rawProbabilities.map((item, index) => ({
+          ...item,
+          label: item?.label || item?.bitstring || `Sample ${index + 1}`,
+          probability: toFiniteNumber(item?.probability ?? item?.value ?? item?.weight, 0),
+          assignments: Array.isArray(item?.assignments)
+            ? item.assignments.map((assignment, assignmentIndex) =>
+                normalizeAssignmentItem(assignment, assignmentIndex)
+              )
+            : [],
+        }))
+      : [],
+  }
+}
+
+async function requestOptimize(payload) {
+  const endpoints = [
+    '/api/optimize',
+    'http://127.0.0.1:4000/api/optimize',
+    'http://localhost:4000/api/optimize',
+    'http://127.0.0.1:8000/optimize',
+    'http://localhost:8000/optimize',
+  ]
+  let lastError = null
+
+  const fetchWithTimeout = async (url, options, timeoutMs = 12000) => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      return await fetch(url, { ...options, signal: controller.signal })
+    } finally {
+      window.clearTimeout(timeout)
+    }
+  }
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}))
+        throw new Error(errorPayload.detail || `QAOA returned ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      const endpointError = new Error(`${endpoint} -> ${error?.message || 'request failed'}`)
+      endpointError.cause = error
+      lastError = endpointError
+    }
+  }
+
+  throw lastError || new Error('Unable to reach optimization service')
+}
+
 function Dashboard() {
   const { patients, doctors, rooms: roomInventory, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
   const [optimizing, setOptimizing] = useState(false)
@@ -456,32 +548,21 @@ function Dashboard() {
         rooms: roomNames,
       })
       
-      const response = await fetch('/api/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patients: qaoaPayload, rooms: roomNames }),
-      })
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}))
-        console.error('QAOA Error Response:', errorPayload)
-        throw new Error(errorPayload.detail || `QAOA returned ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('QAOA Result:', data)
-      setQaoaResult(data)
+      const data = await requestOptimize({ patients: qaoaPayload, rooms: roomNames })
+      const normalizedData = normalizeQaoaResult(data)
+      console.log('QAOA Result:', normalizedData)
+      setQaoaResult(normalizedData)
 
       const elapsedMs = performance.now() - startedAt
       setOptimizationLatencyMs(elapsedMs)
 
-      const assignedCount = (data.assignments || []).filter((item) => item.room).length
+      const assignedCount = (normalizedData.assignments || []).filter((item) => item.room).length
       const currentPatientMap = new Map(
         patients
           .filter((p) => p.hospital === selectedHospital)
           .map((p) => [p.name, p])
       )
-      const adjustmentsForRun = (data.assignments || []).filter((item) => {
+      const adjustmentsForRun = (normalizedData.assignments || []).filter((item) => {
         const patientName = item.patientName || item.patient
         const existingPatient = currentPatientMap.get(patientName)
         return existingPatient && item.room && existingPatient.room !== item.room
@@ -490,8 +571,8 @@ function Dashboard() {
       const runItem = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
-        satisfaction: data.assignments?.length
-          ? Math.round((assignedCount / data.assignments.length) * 100)
+        satisfaction: normalizedData.assignments?.length
+          ? Math.round((assignedCount / normalizedData.assignments.length) * 100)
           : 0,
         throughput: Number((assignedCount / Math.max(elapsedMs / 1000, 0.001)).toFixed(1)),
         latencyMs: Number(elapsedMs.toFixed(1)),
@@ -502,22 +583,28 @@ function Dashboard() {
 
       const liveReportPayload = buildReportPayload({
         generatedAt: new Date().toISOString(),
-        solver: data?.solver || 'qaoa',
-        cost: Number.isFinite(data?.cost) ? data.cost : null,
+        solver: normalizedData?.solver || 'qaoa',
+        cost: Number.isFinite(normalizedData?.cost) ? normalizedData.cost : null,
         latencyMs: elapsedMs,
         throughput: Number((assignedCount / Math.max(elapsedMs / 1000, 0.001)).toFixed(1)),
         satisfactionScore: runItem.satisfaction,
-        fairnessIndex: computeFairness(data?.assignments || [], roomNames),
+        fairnessIndex: computeFairness(normalizedData?.assignments || [], roomNames),
         scheduleAdjustments: adjustmentsForRun,
-        assignments: data?.assignments || [],
-        probabilities: data?.probabilities || [],
+        assignments: normalizedData?.assignments || [],
+        probabilities: normalizedData?.probabilities || [],
         trend: [...(nextHistory.slice(-4).map((item) => item.satisfaction) || []), runItem.satisfaction],
         runHistory: nextHistory.slice(-10),
       })
       localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(liveReportPayload))
     } catch (error) {
       console.error('QAOA Error:', error)
-      setQaoaError(error.message || 'Unable to reach QAOA service')
+      if (String(error?.message || '').toLowerCase().includes('failed to fetch')) {
+        setQaoaError(
+          'Unable to reach optimization services. Ensure gateway (4000) or QAOA service (8000) is running, then retry.'
+        )
+      } else {
+        setQaoaError(error.message || 'Unable to reach QAOA service')
+      }
     } finally {
       setOptimizing(false)
     }
@@ -537,7 +624,7 @@ function Dashboard() {
         room: {
           patients: qaoaPatients.map((patient) => ({
             id: patient.id,
-            priority: patient.priority > 1 ? 'high' : 'medium',
+            priority: Number(patient.priority) || 1,
             icu: false,
             department: 'General Medicine',
           })),
@@ -755,7 +842,7 @@ function Dashboard() {
               preload="auto"
               autoPlay
               loop
-              controls
+              controls={false}
               muted
               playsInline
               crossOrigin="anonymous"
@@ -790,9 +877,9 @@ function Dashboard() {
               <div className="qaoa-card">
                 <h4>Assignments</h4>
                 <ul className="qaoa-list">
-                  {qaoaResult.assignments?.map((item) => (
-                    <li key={`${item.patient}-${item.room}`}>
-                      {item.patient} → {item.room || 'Unassigned'}
+                  {qaoaResult.assignments?.map((item, index) => (
+                    <li key={`${getAssignmentPatientName(item) || index}-${item.room || 'unassigned'}`}>
+                      {getAssignmentPatientName(item) || `Patient ${index + 1}`} → {item.room || 'Unassigned'}
                     </li>
                   ))}
                 </ul>
