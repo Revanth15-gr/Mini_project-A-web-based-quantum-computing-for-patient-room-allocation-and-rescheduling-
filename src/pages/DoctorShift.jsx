@@ -19,6 +19,11 @@ function buildScheduleCacheKey(hospital, date) {
   return `${hospital}::${date}`
 }
 
+function isFallbackDoctorResult(payload) {
+  const algorithm = String(payload?.algorithm || payload?.solver || '').toLowerCase()
+  return algorithm.includes('local-fallback')
+}
+
 function DoctorShift() {
   const { doctors, hospitals = [] } = useContext(HospitalContext)
   const [selectedHospital, setSelectedHospital] = useState('Vizag City Care Hospital')
@@ -52,6 +57,45 @@ function DoctorShift() {
     [selectedHospital, selectedDate]
   )
 
+  const algorithmUsed = useMemo(() => {
+    if (!result) {
+      return 'Not generated'
+    }
+
+    if (Array.isArray(result.pipeline) && result.pipeline.length) {
+      return result.pipeline.join(' + ')
+    }
+
+    if (Array.isArray(result.raw?.pipeline) && result.raw.pipeline.length) {
+      return result.raw.pipeline.join(' + ')
+    }
+
+    if (Array.isArray(result.raw?.result?.pipeline) && result.raw.result.pipeline.length) {
+      return result.raw.result.pipeline.join(' + ')
+    }
+
+    return result.algorithm || result.solver || 'QAOA + VQE + Quantum Annealing'
+  }, [result])
+
+  const totalAssigned = useMemo(() => {
+    if (!result?.assignments?.length) {
+      return Number(result?.assigned_count || 0)
+    }
+
+    if (Number.isFinite(Number(result?.assigned_count))) {
+      return Number(result.assigned_count)
+    }
+
+    return result.assignments.filter((item) => item?.doctor_id || item?.doctor_name || item?.doctor).length
+  }, [result])
+
+  const totalShifts = useMemo(() => {
+    if (Number.isFinite(Number(result?.total_shifts))) {
+      return Number(result.total_shifts)
+    }
+    return shifts.length
+  }, [result, shifts.length])
+
   useEffect(() => {
     setError('')
 
@@ -64,7 +108,7 @@ function DoctorShift() {
     const cache = readDoctorShiftCache()
     const cachedItem = cache[cacheKey]
 
-    if (cachedItem?.result) {
+    if (cachedItem?.result && !isFallbackDoctorResult(cachedItem.result)) {
       setResult(cachedItem.result)
       setScheduleSource('cached')
       return
@@ -78,7 +122,7 @@ function DoctorShift() {
     if (cacheKey) {
       const cache = readDoctorShiftCache()
       const cachedItem = cache[cacheKey]
-      if (cachedItem?.result) {
+      if (cachedItem?.result && !isFallbackDoctorResult(cachedItem.result)) {
         setResult(cachedItem.result)
         setScheduleSource('cached')
         setError('')
@@ -123,7 +167,7 @@ function DoctorShift() {
       }
 
       setResult(data)
-      if (cacheKey) {
+      if (cacheKey && !isFallbackDoctorResult(data)) {
         const cache = readDoctorShiftCache()
         cache[cacheKey] = {
           generatedAt: new Date().toISOString(),
@@ -285,15 +329,17 @@ function DoctorShift() {
               ))}
             </div>
 
-            {result.optimization_score !== undefined && (
-              <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: 'rgba(76, 141, 255, 0.1)', borderRadius: '8px' }}>
-                <p style={{ margin: '0', fontSize: '0.95rem' }}>
-                  <strong>Optimization Score:</strong> {(result.optimization_score * 100).toFixed(1)}% |{' '}
-                  <strong>Algorithm:</strong> {result.algorithm || 'QAOA + VQE'} |{' '}
-                  <strong>Total Assignments:</strong> {result.assigned_count || 0}/{result.total_shifts || 0}
-                </p>
-              </div>
-            )}
+            <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: 'rgba(76, 141, 255, 0.1)', borderRadius: '8px' }}>
+              <p style={{ margin: '0', fontSize: '0.95rem' }}>
+                {result.optimization_score !== undefined ? (
+                  <>
+                    <strong>Optimization Score:</strong> {(result.optimization_score * 100).toFixed(1)}% |{' '}
+                  </>
+                ) : null}
+                <strong>Algorithm:</strong> {algorithmUsed} |{' '}
+                <strong>Total Assignments:</strong> {totalAssigned}/{totalShifts}
+              </p>
+            </div>
           </div>
         ) : null}
       </section>

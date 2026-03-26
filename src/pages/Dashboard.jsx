@@ -544,6 +544,8 @@ function Dashboard() {
       scheduleAdjustments,
       assignments: qaoaResult?.assignments || [],
       probabilities: qaoaResult?.probabilities || [],
+      pipeline: qaoaResult?.pipeline || [],
+      hybridBundle: qaoaResult?.hybrid_bundle || null,
       trend: satisfactionTrend,
       runHistory: runHistory.slice(-10),
       system: {
@@ -930,6 +932,18 @@ function Dashboard() {
                   ) : (
                     <li>Not available</li>
                   )}
+                </ul>
+              </div>
+              <div className="qaoa-card">
+                <h4>Hybrid Algorithms</h4>
+                <p style={{ marginBottom: '0.5rem', fontSize: '0.85rem', color: '#5c6a85' }}>
+                  {qaoaResult.algorithm_used || 'QAOA + Grover + VQE + Quantum Annealing + Amplitude Amplification + Minimum Finding'}
+                </p>
+                <ul className="qaoa-list">
+                  {(Array.isArray(qaoaResult.pipeline) ? qaoaResult.pipeline : []).map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                  {!Array.isArray(qaoaResult.pipeline) || !qaoaResult.pipeline.length ? <li>Not available</li> : null}
                 </ul>
               </div>
             </div>

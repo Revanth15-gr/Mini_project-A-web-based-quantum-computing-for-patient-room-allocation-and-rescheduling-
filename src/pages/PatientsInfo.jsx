@@ -11,6 +11,46 @@ function PatientsInfo() {
     patient.id ||
     `${patient.hospital}:${patient.name}:${patient.room || 'unassigned'}:${patient.next || 'none'}:${fallbackIndex}`
 
+  const rebalanceAssignmentsForRoomChange = (assignments, sourcePatients, sourceRooms) => {
+    const roomPool = Array.from(new Set((sourceRooms || []).map((room) => room?.name || room).filter(Boolean)))
+    const currentRoomByPatient = new Map(
+      (sourcePatients || []).map((patient) => [String(patient?.name || '').toLowerCase(), patient?.room || null])
+    )
+    const usedRooms = new Set()
+
+    return (assignments || []).map((assignment) => {
+      const patientName = String(assignment?.patientName || assignment?.patient || '').toLowerCase()
+      const currentRoom = currentRoomByPatient.get(patientName)
+      const preferredRoom = assignment?.room
+
+      let nextRoom = null
+      const preferredIsAvailable =
+        preferredRoom && roomPool.includes(preferredRoom) && !usedRooms.has(preferredRoom)
+
+      if (preferredIsAvailable && (roomPool.length <= 1 || preferredRoom !== currentRoom)) {
+        nextRoom = preferredRoom
+      }
+
+      if (!nextRoom) {
+        const candidates = roomPool.filter((roomName) => !usedRooms.has(roomName))
+        nextRoom =
+          candidates.find((roomName) => roomPool.length <= 1 || roomName !== currentRoom) ||
+          candidates[0] ||
+          preferredRoom ||
+          null
+      }
+
+      if (nextRoom) {
+        usedRooms.add(nextRoom)
+      }
+
+      return {
+        ...assignment,
+        room: nextRoom,
+      }
+    })
+  }
+
   const [showForm, setShowForm] = useState(false)
   const [isRescheduling, setIsRescheduling] = useState(false)
   const [reschedulingResult, setReschedulingResult] = useState(null)
@@ -126,10 +166,19 @@ function PatientsInfo() {
         patientName: patient.label || patient.id,
         room: roomsForQaoa[index] || null,
       }))
+      const allSelectedPatients = patients.filter((patient, index) =>
+        patient.hospital === selectedHospital && selectedPatients.includes(getPatientKey(patient, index))
+      )
+      const roomsInHospital = rooms.filter((room) => room.hospital === selectedHospital)
+      const adjustedAssignments = rebalanceAssignmentsForRoomChange(
+        offlineAssignments,
+        allSelectedPatients,
+        roomsInHospital
+      )
 
       return {
-        cost: offlineAssignments.filter((item) => item.room).length,
-        assignments: offlineAssignments,
+        cost: adjustedAssignments.filter((item) => item.room).length,
+        assignments: adjustedAssignments,
         probabilities: [],
         solver: 'frontend-fallback',
         message: 'Optimization service unavailable. Used local fallback assignment.',
@@ -283,7 +332,7 @@ function PatientsInfo() {
 
       const normalizedResult = {
         ...result,
-        assignments: dedupedAssignments,
+        assignments: rebalanceAssignmentsForRoomChange(dedupedAssignments, hospitalPatients, hospitalRooms),
       }
 
       setReschedulingResult(normalizedResult)
@@ -371,11 +420,32 @@ function PatientsInfo() {
       // Update each patient with their new room assignment
       for (const assignment of optimizationResult.assignments) {
         try {
-          // Find the patient by name, hospital, ensure matching the selected hospital only
+          // Match by patient ID first to avoid updating the wrong record when names repeat.
+          const assignmentPatientId = assignment.patientId
           const patientName = assignment.patientName || assignment.patient
-          const patient = patients.find(
-            (item) => item.hospital === selectedHospital && item.name.toLowerCase() === patientName.toLowerCase()
-          )
+          let patient = null
+
+          if (assignmentPatientId) {
+            patient = patients.find((item) => {
+              if (item.hospital !== selectedHospital) {
+                return false
+              }
+              const directId = item._id || item.id
+              if (directId && String(directId) === String(assignmentPatientId)) {
+                return true
+              }
+              const compositePrefix = `${item.hospital}:${item.name}:`
+              return String(assignmentPatientId).startsWith(compositePrefix)
+            })
+          }
+
+          if (!patient) {
+            patient = patients.find(
+              (item) =>
+                item.hospital === selectedHospital &&
+                String(item.name || '').toLowerCase() === String(patientName || '').toLowerCase()
+            )
+          }
           
           if (!patient) {
             console.warn(`Patient not found: ${patientName}`)

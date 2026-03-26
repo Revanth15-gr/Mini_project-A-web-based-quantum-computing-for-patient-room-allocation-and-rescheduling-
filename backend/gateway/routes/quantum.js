@@ -182,8 +182,46 @@ const normalizeRoomResponse = (data = {}, body = {}) => {
 }
 
 const normalizeEmergencyResponse = (data = {}, body = {}) => {
+  const bodyHospitals = Array.isArray(body?.hospitals) ? body.hospitals : []
+
+  const computeShortestPath = (currentAssignments = []) => {
+    const minFromQuantum = data?.result?.result?.minimum_distance || data?.result?.minimum_distance || null
+
+    let hospitalName = minFromQuantum?.hospital?.name || null
+    let distanceKm = Number(minFromQuantum?.distance)
+
+    if ((!hospitalName || !Number.isFinite(distanceKm) || distanceKm <= 0) && bodyHospitals.length) {
+      const sorted = [...bodyHospitals]
+        .map((item) => ({
+          name: item?.name || null,
+          distance_km: Number(item?.distance_km ?? item?.distance ?? Number.POSITIVE_INFINITY),
+        }))
+        .filter((item) => item.name)
+        .sort((a, b) => a.distance_km - b.distance_km)
+
+      if (sorted.length) {
+        hospitalName = sorted[0].name
+        distanceKm = sorted[0].distance_km
+      }
+    }
+
+    if ((!hospitalName || !Number.isFinite(distanceKm)) && currentAssignments.length) {
+      hospitalName = currentAssignments[0]?.hospital || null
+      distanceKm = Number(currentAssignments[0]?.distance_km ?? 0)
+    }
+
+    return {
+      hospital: hospitalName || null,
+      distance_km: Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(2)) : null,
+      method: 'Grover + MinimumFinding',
+    }
+  }
+
   if (Number.isFinite(data?.assigned_count)) {
-    return data
+    return {
+      ...data,
+      shortest_path: data?.shortest_path || computeShortestPath(data?.assignments || []),
+    }
   }
 
   const allocations =
@@ -207,6 +245,7 @@ const normalizeEmergencyResponse = (data = {}, body = {}) => {
       (Array.isArray(body?.emergencies) && body.emergencies.length) || assignments.length || data?.total_cases || 0,
     assignments,
     pipeline: data?.result?.pipeline || data?.pipeline || ['Grover', 'AmplitudeAmplification', 'QAOA', 'MinimumFinding'],
+    shortest_path: computeShortestPath(assignments),
     explainability: data?.result?.quantum_explainability || data?.quantum_explainability,
     raw: data,
   }

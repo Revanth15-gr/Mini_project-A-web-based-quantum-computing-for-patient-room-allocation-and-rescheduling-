@@ -614,17 +614,35 @@ function HospitalProvider({ children }) {
     priority,
     scheduledAt,
     estimatedDurationHours,
+    preferredRoomName,
   }) => {
-    const availableRooms = operationRooms.filter(
-      (room) => room.hospital === hospital && room.status === 'Available'
-    )
+    let selectedRoom = null
+    setOperationRooms((current) => {
+      const availableRooms = current.filter(
+        (room) => room.hospital === hospital && room.status === 'Available'
+      )
 
-    if (!availableRooms.length) {
+      if (!availableRooms.length) {
+        selectedRoom = null
+        return current
+      }
+
+      selectedRoom =
+        availableRooms.find((room) => room.name === preferredRoomName) ||
+        availableRooms[0]
+
+      return current.map((room) =>
+        room.id === selectedRoom.id
+          ? { ...room, status: 'Allocated' }
+          : room
+      )
+    })
+
+    if (!selectedRoom) {
       addNotification(`No operation room available in ${hospital}`, 'warning')
       return null
     }
 
-    const selectedRoom = availableRooms[0]
     const allocation = {
       appointmentId,
       patientName,
@@ -661,14 +679,6 @@ function HospitalProvider({ children }) {
       console.warn('⚠️ OR allocation saved locally:', error.message)
       addNotification('OR allocation saved locally (DB unavailable)', 'warning')
     }
-
-    setOperationRooms((current) =>
-      current.map((room) =>
-        room.id === selectedRoom.id
-          ? { ...room, status: 'Allocated' }
-          : room
-      )
-    )
 
     setOperationAllocations((current) => [finalAllocation, ...current])
 

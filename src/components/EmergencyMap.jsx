@@ -28,7 +28,7 @@ function EmergencyMap({
     [assignedHospital, hospitals]
   )
 
-  const isCritical = String(emergency?.severity || '').toLowerCase() === 'critical'
+  const isTrackingEnabled = Boolean(emergency && assigned)
 
   const selectedAmbulance = useMemo(
     () => ambulanceUnits.find((item) => item.id === selectedAmbulanceId) || ambulanceUnits[0] || null,
@@ -66,7 +66,7 @@ function EmergencyMap({
       return undefined
     }
 
-    if (!isCritical || !assigned) {
+    if (!isTrackingEnabled) {
       setLocalTrackProgress(0)
       return
     }
@@ -79,7 +79,7 @@ function EmergencyMap({
     }, 800)
 
     return () => clearInterval(timer)
-  }, [isCritical, assigned, emergency?.id, trackingProgress])
+  }, [isTrackingEnabled, assigned, emergency?.id, trackingProgress])
 
   const ambulanceIcon = useMemo(
     () =>
@@ -142,7 +142,7 @@ function EmergencyMap({
       return 'Patient dropped at assigned hospital'
     }
 
-    if (!isCritical || !assigned) {
+    if (!isTrackingEnabled) {
       return 'Tracking inactive'
     }
 
@@ -153,7 +153,7 @@ function EmergencyMap({
       return 'Patient onboard: transporting to assigned hospital'
     }
     return 'Ambulance arrived at assigned hospital'
-  }, [assigned, isCritical, trackProgress, trackingState])
+  }, [assigned, isTrackingEnabled, trackProgress, trackingState])
 
   return (
     <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(76, 141, 255, 0.2)' }}>
@@ -248,18 +248,18 @@ function EmergencyMap({
           </Polyline>
         ) : null}
 
-        {isCritical && trackingPath.length ? (
+        {isTrackingEnabled && trackingPath.length ? (
           <Polyline
             positions={trackingPath}
             pathOptions={{ color: '#2563eb', weight: 3, opacity: 0.75, dashArray: '8 8' }}
           >
             <Tooltip sticky>
-              Critical tracking route (Uber-style)
+              Live ambulance route (Uber-style)
             </Tooltip>
           </Polyline>
         ) : null}
 
-        {isCritical && startPoint ? (
+        {isTrackingEnabled && startPoint ? (
           <CircleMarker
             center={startPoint}
             radius={7}
@@ -271,7 +271,7 @@ function EmergencyMap({
           </CircleMarker>
         ) : null}
 
-        {isCritical && ambulancePosition ? (
+        {isTrackingEnabled && ambulancePosition ? (
           <Marker position={ambulancePosition} icon={ambulanceIcon}>
             <Popup>
               <div>
@@ -309,9 +309,9 @@ function EmergencyMap({
           <span>Ambulances: ambulance icons</span>
           <span>Assigned route: green line</span>
           <span>Candidate routes: dashed gray lines</span>
-          {isCritical ? <span>Critical tracking: blue dashed route + live ambulance</span> : null}
+          {isTrackingEnabled ? <span>Live tracking: blue dashed route + moving ambulance</span> : null}
         </div>
-        {isCritical ? (
+        {isTrackingEnabled ? (
           <div style={{ marginTop: '0.5rem', color: '#1d4ed8', fontSize: '0.85rem', fontWeight: 600 }}>
             {trackingLabel}
           </div>

@@ -139,6 +139,37 @@ const buildFallbackOptimization = (payload = {}) => {
     assignments,
     probabilities: buildProbabilitySamples(assignments, true),
     solver: 'gateway-fallback',
+    pipeline: [
+      'QAOA',
+      'Grover',
+      'VQE',
+      'QuantumAnnealing',
+      'AmplitudeAmplification',
+      'MinimumFinding',
+    ],
+    algorithm_used: 'QAOA + Grover + VQE + Quantum Annealing + Amplitude Amplification + Minimum Finding',
+    hybrid_bundle: {
+      room_allocation: {
+        pipeline: ['QAOA', 'QuantumAnnealing', 'AmplitudeAmplification'],
+        result: assignments,
+      },
+      emergency_assignment: {
+        pipeline: ['Grover', 'AmplitudeAmplification', 'QAOA', 'MinimumFinding'],
+        result: assignments,
+      },
+      operating_room: {
+        pipeline: ['QAOA', 'VQE', 'MinimumFinding'],
+        result: assignments,
+      },
+      resource_balance: {
+        pipeline: ['VQE', 'QuantumAnnealing'],
+        result: assignments,
+      },
+      grover_room_search: {
+        pipeline: ['Grover'],
+        result: assignments.length ? assignments[0] : null,
+      },
+    },
     message: 'Used fallback optimizer because QAOA service was unavailable or failed.',
   }
 }

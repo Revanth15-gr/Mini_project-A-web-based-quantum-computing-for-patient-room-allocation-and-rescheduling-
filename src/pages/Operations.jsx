@@ -79,6 +79,11 @@ function Operations() {
     }
 
     const booked = await bookOpAppointment(appointmentForm)
+    await runAutoQuantumOperationAllocation({
+      appointments: booked ? [booked] : [],
+      hospital: booked?.hospital || appointmentForm.hospital,
+      silentNoBooked: true,
+    })
     setAppointmentForm((current) => ({
       ...current,
       patientName: '',
@@ -173,8 +178,10 @@ function Operations() {
         data,
       })
       pushAction(`${actionLabel} completed`) 
+      return data
     } catch (error) {
       addNotification(`Quantum call failed: ${error.message}`, 'error')
+      return null
     } finally {
       setQuantumLoading(false)
     }
@@ -227,6 +234,97 @@ function Operations() {
       cases: cases.length ? cases : [{ id: 'C-001', priority: 1.1 }],
       operating_rooms: operatingRooms.length ? operatingRooms : ['OR-1', 'OR-2'],
     }, 'Quantum OR Scheduling')
+  }
+
+  const runAutoQuantumOperationAllocation = async ({ appointments = null, hospital = null, silentNoBooked = false } = {}) => {
+    const hospitalToUse = hospital || allocationForm.hospital
+    const appointmentsInHospital = openAppointments.filter(
+      (item) => item.hospital === hospitalToUse
+    )
+    const targetAppointments = Array.isArray(appointments) && appointments.length
+      ? appointments
+      : (appointmentsInHospital.length ? appointmentsInHospital : openAppointments)
+
+    if (!targetAppointments.length) {
+      if (!silentNoBooked) {
+        addNotification('No booked OP appointments available for automatic OR allocation', 'warning')
+      }
+      return
+    }
+
+    const freeRooms = operationRooms
+      .filter((room) => room.hospital === hospitalToUse && room.status === 'Available')
+      .map((room) => room.name)
+
+    if (!freeRooms.length) {
+      addNotification(`No available OR rooms in ${hospitalToUse} for auto allocation`, 'warning')
+      return
+    }
+
+    const selectedAppointments = targetAppointments.slice(0, freeRooms.length)
+    const quantumPayload = {
+      cases: selectedAppointments.map((item, index) => ({
+        id: item.id || `C-${index + 1}`,
+        priority: item.priority === 'Emergency' ? 1.8 : item.priority === 'High' ? 1.3 : 1.0,
+        distance: index + 1,
+      })),
+      operating_rooms: freeRooms,
+    }
+
+    const quantumData = await executeQuantumCall(
+      '/api/quantum/operating-room',
+      quantumPayload,
+      'Quantum OR Auto Allocation'
+    )
+
+    const rawAllocations =
+      quantumData?.result?.result?.allocations ||
+      quantumData?.result?.allocations ||
+      []
+
+    const allocations = Array.isArray(rawAllocations) ? rawAllocations : []
+    if (!allocations.length) {
+      addNotification('Quantum OR scheduling returned no allocations', 'warning')
+      return
+    }
+
+    const appointmentById = new Map(selectedAppointments.map((item) => [item.id, item]))
+    let successCount = 0
+
+    for (let index = 0; index < allocations.length; index += 1) {
+      const item = allocations[index]
+      const appointment = appointmentById.get(item?.entity)
+      if (!appointment || !item?.resource) {
+        continue
+      }
+
+      const scheduledAt = appointment.appointmentDate && appointment.appointmentTime
+        ? `${appointment.appointmentDate}T${appointment.appointmentTime}`
+        : new Date(Date.now() + index * 3600_000).toISOString().slice(0, 16)
+
+      const created = await allocateOperationRoom({
+        appointmentId: appointment.id,
+        patientName: appointment.patientName,
+        hospital: appointment.hospital,
+        procedure: appointment.department === 'Surgery' ? 'General Surgery' : `${appointment.department} Procedure`,
+        priority: 'High',
+        scheduledAt,
+        estimatedDurationHours: 2,
+        preferredRoomName: item.resource,
+      })
+
+      if (created) {
+        successCount += 1
+      }
+    }
+
+    if (!successCount) {
+      addNotification('Quantum auto allocation could not assign any operations', 'warning')
+      return
+    }
+
+    addNotification(`Quantum auto allocation completed for ${successCount} operation(s)`, 'success')
+    pushAction(`Quantum auto-allocated ${successCount} operations without manual entry`)
   }
 
   const runQuantumPrediction = async () => {
@@ -380,7 +478,7 @@ function Operations() {
           <div>
             <h3>Operation Room Allocation</h3>
             <p className="panel-subtitle">
-              {allocationForm.hospital} | {availableRooms.length} operation rooms currently available
+              {allocationForm.hospital} | {availableRooms.length} operation rooms currently available | fully hands-free quantum auto allocation after OP booking
             </p>
           </div>
         </div>
@@ -463,16 +561,6 @@ function Operations() {
               setAllocationForm((current) => ({ ...current, scheduledAt: event.target.value }))
             }
             required
-          />
-
-          <input
-            type="number"
-            min="1"
-            max="12"
-            value={allocationForm.estimatedDurationHours}
-            onChange={(event) =>
-              setAllocationForm((current) => ({ ...current, estimatedDurationHours: event.target.value }))
-            }
           />
 
           <button className="primary-button" type="submit">

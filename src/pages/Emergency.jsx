@@ -666,9 +666,17 @@ function Emergency() {
       {result?.assignments?.length ? (
         <section className="panel" style={{ gridColumn: '1 / -1' }}>
           <h3 style={{ marginBottom: '0.75rem' }}>Quantum Optimization Result</h3>
-          <p><strong>Algorithm:</strong> {result.algorithm || 'QAOA + Grover'}</p>
+          <p><strong>Algorithm:</strong> {result.algorithm || 'Grover + QAOA + MinimumFinding'}</p>
           <p><strong>Score:</strong> {result.optimization_score !== undefined ? `${(result.optimization_score * 100).toFixed(1)}%` : '-'}</p>
           <p><strong>Cases:</strong> {result.assigned_count}/{result.total_cases}</p>
+          {result.shortest_path?.hospital ? (
+            <p>
+              <strong>Shortest Path Hospital (Grover):</strong> {result.shortest_path.hospital}
+              {Number.isFinite(Number(result.shortest_path.distance_km))
+                ? ` (${Number(result.shortest_path.distance_km).toFixed(2)} km)`
+                : ''}
+            </p>
+          ) : null}
         </section>
       ) : null}
     </div>
