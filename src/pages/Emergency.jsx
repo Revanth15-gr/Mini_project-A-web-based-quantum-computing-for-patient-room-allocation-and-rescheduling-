@@ -159,6 +159,7 @@ function Emergency() {
   const [result, setResult] = useState(null)
   const [assignedHospital, setAssignedHospital] = useState(null)
   const [emailSent, setEmailSent] = useState(false)
+  const [emailStatusMessage, setEmailStatusMessage] = useState('')
   const [trackingId, setTrackingId] = useState(null)
   const [trackingLive, setTrackingLive] = useState(null)
 
@@ -258,6 +259,7 @@ function Emergency() {
     setLoading(true)
     setError('')
     setEmailSent(false)
+    setEmailStatusMessage('')
 
     try {
       const payload = {
@@ -292,9 +294,44 @@ function Emergency() {
       setTrackingId(data?.tracking?.trackingId || null)
       setTrackingLive(data?.tracking || null)
 
-      setTimeout(() => {
-        setEmailSent(true)
-      }, 600)
+      const notifyPayload = {
+        caseDetails: {
+          caseId: activeCase.caseId,
+          patientName: activeCase.patientName,
+          severity: activeCase.severity,
+          location: activeCase.location,
+          incident: 'Road Traffic Accident',
+          eta: data?.tracking?.state === 'dropoff' ? 'Arrived' : '10 min',
+        },
+        assignedHospital: {
+          name: resolvedHospital,
+          distance: nearbyHospitals.find((hospital) => hospital.name === resolvedHospital)?.distance,
+          availableRooms: nearbyHospitals.find((hospital) => hospital.name === resolvedHospital)?.icu_available,
+        },
+        recipients: {
+          email: undefined,
+        },
+      }
+
+      const notifyResponse = await fetch('/api/emergency/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notifyPayload),
+      })
+
+      const notifyData = await notifyResponse.json().catch(() => ({}))
+      const deliveredEmail = Boolean(notifyData?.channels?.email?.sent)
+      setEmailSent(deliveredEmail)
+
+      if (deliveredEmail) {
+        setEmailStatusMessage(`Notification email sent to ${notifyData?.recipients?.email || 'assigned hospital'}`)
+      } else {
+        const reason =
+          notifyData?.channels?.email?.reason ||
+          notifyData?.error ||
+          'Email channel unavailable (check SMTP configuration)'
+        setEmailStatusMessage(`Email not sent: ${reason}`)
+      }
     } catch (requestError) {
       setError(requestError.message || 'Unable to assign emergency hospital')
     } finally {
@@ -453,7 +490,9 @@ function Emergency() {
         </div>
 
         {error ? <p style={{ color: '#b91c1c', marginTop: '0.75rem' }}>{error}</p> : null}
-        {emailSent ? <p style={{ color: '#15803d', marginTop: '0.75rem' }}>Notification sent to assigned hospital</p> : null}
+        {emailStatusMessage ? (
+          <p style={{ color: emailSent ? '#15803d' : '#b45309', marginTop: '0.75rem' }}>{emailStatusMessage}</p>
+        ) : null}
       </section>
 
       <section className="panel" style={{ gridColumn: '1 / -1' }}>

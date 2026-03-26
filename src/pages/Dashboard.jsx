@@ -233,6 +233,48 @@ async function requestOptimize(payload) {
   throw lastError || new Error('Unable to reach optimization service')
 }
 
+async function requestQuantumPanel(panelType, payload) {
+  const endpointMap = {
+    room: ['/api/quantum-room', 'http://127.0.0.1:4000/api/quantum-room', 'http://localhost:4000/api/quantum-room'],
+    emergency: ['/api/quantum-emergency', 'http://127.0.0.1:4000/api/quantum-emergency', 'http://localhost:4000/api/quantum-emergency'],
+    doctor: ['/api/quantum-doctor', 'http://127.0.0.1:4000/api/quantum-doctor', 'http://localhost:4000/api/quantum-doctor'],
+  }
+
+  const endpoints = endpointMap[panelType] || []
+  let lastError = null
+
+  const fetchWithTimeout = async (url, options, timeoutMs = 15000) => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      return await fetch(url, { ...options, signal: controller.signal })
+    } finally {
+      window.clearTimeout(timeout)
+    }
+  }
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.error || `Quantum panel request failed: ${response.status}`)
+      }
+
+      return data
+    } catch (error) {
+      lastError = new Error(`${endpoint} -> ${error?.message || 'request failed'}`)
+    }
+  }
+
+  throw lastError || new Error('Quantum panel request failed')
+}
+
 function Dashboard() {
   const { patients, doctors, rooms: roomInventory, hospitals, selectedHospital, setSelectedHospital } = useContext(HospitalContext)
   const [optimizing, setOptimizing] = useState(false)
@@ -673,16 +715,7 @@ function Dashboard() {
         },
       }
 
-      const response = await fetch(endpoints[panelType], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadMap[panelType]),
-      })
-
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(data.error || `Quantum panel request failed: ${response.status}`)
-      }
+      const data = await requestQuantumPanel(panelType, payloadMap[panelType])
 
       setQuantumPanelState((prev) => ({ ...prev, loading: '', [panelType]: data }))
     } catch (error) {

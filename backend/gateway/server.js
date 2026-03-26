@@ -28,6 +28,27 @@ const QAOA_URL = process.env.QAOA_SERVICE_URL || 'http://127.0.0.1:8000'
 const MONGODB_URI = process.env.MONGODB_URI
 const DEFAULT_ALERT_EMAIL = process.env.EMERGENCY_ALERT_EMAIL || 'gudalarevanth15@gmail.com'
 const DEFAULT_ALERT_PHONE = process.env.EMERGENCY_ALERT_PHONE || '+919392759970'
+const HOSPITAL_ALERT_EMAILS = {
+  'vizag city care hospital': process.env.ALERT_EMAIL_VIZAG_CITY_CARE || DEFAULT_ALERT_EMAIL,
+  'vijayawada heart institute': process.env.ALERT_EMAIL_VIJAYAWADA_HEART || DEFAULT_ALERT_EMAIL,
+  'guntur neuro center': process.env.ALERT_EMAIL_GUNTUR_NEURO || DEFAULT_ALERT_EMAIL,
+  'kgh emergency': process.env.ALERT_EMAIL_KGH || DEFAULT_ALERT_EMAIL,
+  'apollo vizag': process.env.ALERT_EMAIL_APOLLO_VIZAG || DEFAULT_ALERT_EMAIL,
+  'care hospitals vizag': process.env.ALERT_EMAIL_CARE_VIZAG || DEFAULT_ALERT_EMAIL,
+}
+
+const resolveEmergencyEmailRecipient = (hospitalName, providedEmail) => {
+  if (Array.isArray(providedEmail) && providedEmail.length) {
+    return providedEmail.filter(Boolean).join(',')
+  }
+
+  if (typeof providedEmail === 'string' && providedEmail.trim()) {
+    return providedEmail.trim()
+  }
+
+  const normalizedHospital = String(hospitalName || '').trim().toLowerCase()
+  return HOSPITAL_ALERT_EMAILS[normalizedHospital] || DEFAULT_ALERT_EMAIL
+}
 
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
@@ -856,7 +877,7 @@ app.post('/api/emergency/notify', async (req, res) => {
   try {
     const { caseDetails = {}, assignedHospital = {}, recipients = {} } = req.body || {}
 
-    const targetEmail = recipients.email || DEFAULT_ALERT_EMAIL
+    const targetEmail = resolveEmergencyEmailRecipient(assignedHospital.name, recipients.email)
     const targetPhone = String(recipients.phone || DEFAULT_ALERT_PHONE).replace(/\s+/g, '')
 
     const caseId = caseDetails.caseId || 'Unknown Case'
