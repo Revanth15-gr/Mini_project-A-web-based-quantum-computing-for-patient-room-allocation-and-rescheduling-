@@ -1,8 +1,11 @@
 from typing import Any, Dict, List, Optional
+import os
 import hashlib
 import json
 import base64
 import asyncio
+
+import uvicorn
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -908,3 +911,8 @@ def quantum_status():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
