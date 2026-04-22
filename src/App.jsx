@@ -12,7 +12,6 @@ import DischargeHistory from './pages/DischargeHistory.jsx'
 import Settings from './pages/Settings.jsx'
 import Operations from './pages/Operations.jsx'
 import OptimizationReport from './pages/OptimizationReport.jsx'
-import QuantumHackathonDemo from './pages/QuantumHackathonDemo.jsx'
 import DoctorShift from './pages/DoctorShift.jsx'
 import './App.css'
 
@@ -34,7 +33,6 @@ function App() {
           <Route path="discharges" element={<DischargeHistory />} />
           <Route path="settings" element={<Settings />} />
         </Route>
-        <Route path="quantum-demo" element={<QuantumHackathonDemo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
         <Route path="optimization-report" element={<OptimizationReport />} />
       </Routes>

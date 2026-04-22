@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
 const REPORT_STORAGE_KEY = 'optimizationReportData'
+const quantumWardLogoUrl = 'https://www.clipartmax.com/png/middle/336-3367082_all-photo-png-clipart-logo-hospital-symbol.png'
 
 const links = [
   { to: '/', label: 'Dashboard' },
@@ -11,7 +12,7 @@ const links = [
   { to: '/doctors', label: 'Doctors' },
   { to: '/emergency', label: 'Emergency' },
   { to: '/doctor-shift', label: 'Doctor Shift' },
-  { to: '/operations', label: 'OP & OR + Bell' },
+  { to: '/operations', label: 'OP & OR' },
   { to: '/discharges', label: 'Discharge History' },
   { to: '/settings', label: 'Settings' },
 ]
@@ -104,17 +105,17 @@ function SideNav() {
 
   return (
     <aside className="side-nav">
-      <div className="brand">
-        <div className="brand-icon" aria-hidden="true">
-          <span className="brand-dot" />
-          <span className="brand-dot" />
-          <span className="brand-dot" />
-        </div>
+      <NavLink to="/" end className="brand brand-link">
+        <div
+          className="brand-icon brand-logo"
+          aria-hidden="true"
+          style={{ backgroundImage: `url(${quantumWardLogoUrl})` }}
+        />
         <div>
           <p className="brand-title">Quantum Ward</p>
           <p className="brand-subtitle">Room Allocation</p>
         </div>
-      </div>
+      </NavLink>
       <nav className="nav-links">
         {links.map((link) => (
           <NavLink

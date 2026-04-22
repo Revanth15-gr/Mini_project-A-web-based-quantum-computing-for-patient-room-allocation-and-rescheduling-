@@ -40,9 +40,6 @@ function Operations() {
     estimatedDurationHours: '2',
   })
 
-  const [bellState, setBellState] = useState('Phi+')
-  const [measurementBasis, setMeasurementBasis] = useState('Z')
-  const [bellResult, setBellResult] = useState(null)
   const [quantumLoading, setQuantumLoading] = useState(false)
   const [quantumResult, setQuantumResult] = useState(null)
   const [liveSimulationOn, setLiveSimulationOn] = useState(false)
@@ -129,33 +126,6 @@ function Operations() {
     }))
     setSelectedHospital(appointment.hospital)
     pushAction(`Loaded ${appointment.patientName} into OR allocation form`)
-  }
-
-  const runBellStateMeasurement = () => {
-    const correlated = bellState === 'Phi+' || bellState === 'Psi+'
-    const sameBit = Math.random() > 0.5 ? 1 : 0
-    const oppositeBit = sameBit === 1 ? 0 : 1
-
-    const qubitA = correlated ? sameBit : sameBit
-    const qubitB = correlated ? sameBit : oppositeBit
-
-    const fidelity = (0.9 + Math.random() * 0.09).toFixed(3)
-    const score = correlated ? 0.84 : 0.78
-
-    const result = {
-      bellState,
-      basis: measurementBasis,
-      qubitA,
-      qubitB,
-      fidelity,
-      entanglementScore: score,
-      measuredAt: new Date().toLocaleTimeString(),
-    }
-
-    setBellResult(result)
-    pushAction(
-      `Bell measurement ${bellState} in ${measurementBasis}-basis -> qA:${qubitA}, qB:${qubitB}`
-    )
   }
 
   const executeQuantumCall = async (endpoint, payload, actionLabel) => {
@@ -595,51 +565,6 @@ function Operations() {
             <p className="panel-subtitle">No active operation room allocations yet.</p>
           )}
         </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h3>Bell States Lab</h3>
-            <p className="panel-subtitle">Simulate Bell-pair outcomes for quantum-assisted scheduling confidence</p>
-          </div>
-        </div>
-
-        <div className="bell-grid">
-          <select value={bellState} onChange={(event) => setBellState(event.target.value)}>
-            <option value="Phi+">Phi+ : (ket00 + ket11) / sqrt(2)</option>
-            <option value="Phi-">Phi- : (ket00 - ket11) / sqrt(2)</option>
-            <option value="Psi+">Psi+ : (ket01 + ket10) / sqrt(2)</option>
-            <option value="Psi-">Psi- : (ket01 - ket10) / sqrt(2)</option>
-          </select>
-
-          <select value={measurementBasis} onChange={(event) => setMeasurementBasis(event.target.value)}>
-            <option value="Z">Z-Basis Measurement</option>
-            <option value="X">X-Basis Measurement</option>
-          </select>
-
-          <button className="primary-button" type="button" onClick={runBellStateMeasurement}>
-            Run Bell Measurement
-          </button>
-        </div>
-
-        {bellResult ? (
-          <div className="bell-result">
-            <p>
-              <strong>State:</strong> {bellResult.bellState} | <strong>Basis:</strong> {bellResult.basis} | <strong>Measured:</strong>{' '}
-              {bellResult.measuredAt}
-            </p>
-            <p>
-              <strong>Qubit A:</strong> {bellResult.qubitA} | <strong>Qubit B:</strong> {bellResult.qubitB}
-            </p>
-            <p>
-              <strong>Entanglement Fidelity:</strong> {bellResult.fidelity} | <strong>Correlation Score:</strong>{' '}
-              {bellResult.entanglementScore}
-            </p>
-          </div>
-        ) : (
-          <p className="panel-subtitle">Run a measurement to view Bell-state correlation output.</p>
-        )}
       </section>
 
       <section className="panel">

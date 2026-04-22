@@ -91,7 +91,6 @@ const fallbackChanges = [
 
 const REPORT_STORAGE_KEY = 'optimizationReportData'
 const RUN_HISTORY_KEY = 'optimizationRunHistory'
-const DASHBOARD_VIDEO_SRC = '/media/dashboard-interactive.mp4'
 
 function formatLatency(ms) {
   if (!Number.isFinite(ms) || ms <= 0) {
@@ -869,23 +868,6 @@ function Dashboard() {
           {quantumPanelState.error ? <p style={{ color: '#b91c1c' }}>{quantumPanelState.error}</p> : null}
         </section>
 
-        <section className="panel interactive-video-panel">
-          <div className="video-frame">
-            <video
-              className="dashboard-video"
-              src={DASHBOARD_VIDEO_SRC}
-              preload="auto"
-              autoPlay
-              loop
-              controls={false}
-              muted
-              playsInline
-              crossOrigin="anonymous"
-              style={{ width: '100%', height: 'auto', display: 'block' }}
-            />
-          </div>
-        </section>
-
         <section className="panel qaoa-output">
           <div className="panel-header">
             <div>
@@ -934,18 +916,6 @@ function Dashboard() {
                   )}
                 </ul>
               </div>
-              <div className="qaoa-card">
-                <h4>Hybrid Algorithms</h4>
-                <p style={{ marginBottom: '0.5rem', fontSize: '0.85rem', color: '#5c6a85' }}>
-                  {qaoaResult.algorithm_used || 'QAOA + Grover + VQE + Quantum Annealing + Amplitude Amplification + Minimum Finding'}
-                </p>
-                <ul className="qaoa-list">
-                  {(Array.isArray(qaoaResult.pipeline) ? qaoaResult.pipeline : []).map((name) => (
-                    <li key={name}>{name}</li>
-                  ))}
-                  {!Array.isArray(qaoaResult.pipeline) || !qaoaResult.pipeline.length ? <li>Not available</li> : null}
-                </ul>
-              </div>
             </div>
           ) : (
             <p className="panel-subtitle">Run QAOA to see assignments.</p>
@@ -981,22 +951,6 @@ function Dashboard() {
               </select>
               <button className="chip" onClick={() => pushAction('Today view selected')}>
                 Today
-              </button>
-              <button
-                className="chip chip-active"
-                onClick={() => pushAction('This week view selected')}
-              >
-                This Week
-              </button>
-              <button className="chip" onClick={() => pushAction('Tomorrow view selected')}>
-                Tomorrow
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => pushAction('Date picker opened')}
-              >
-                April 22, 2024
               </button>
             </div>
           </div>

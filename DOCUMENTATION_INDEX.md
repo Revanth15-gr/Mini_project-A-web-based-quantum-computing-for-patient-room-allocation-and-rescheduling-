@@ -103,13 +103,6 @@
     ├─ Amplitude Amplification
     └─ Hybrid orchestration strategy
 
-12. 🎓 QUANTUM_DEMO_TECHNICAL.md
-    ├─ Interactive demo description
-    ├─ How to use the demo
-    ├─ Demo features explained
-    ├─ Sample scenarios
-    └─ Q&A for judges/audience
-
 ### Special Guides
 
 13. 🏆 JUDGES_READY.md
@@ -256,8 +249,6 @@
 **Startup Scripts:**
 - START_ALL_SERVICES.bat
   └─ Start all 3 servers (Windows)
-- START_QUANTUM_DEMO.bat
-  └─ Start quantum demo (Windows)
 
 **Main App:**
 - src/App.jsx
@@ -290,7 +281,6 @@
 - src/pages/Settings.jsx
 
 **Existing Styles:**
-- src/styles/QuantumHackathonDemo.css
 - src/pages/Hospitals.css
 
 **Existing Hooks:**

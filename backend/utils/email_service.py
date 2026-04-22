@@ -54,63 +54,47 @@ def send_email_notification(hospital_name, hospital_email, patient_name, severit
         Boolean indicating success
     """
     
-    # Email content
-    subject = f"🚑 EMERGENCY ALERT: {severity.upper()} Case Assignment"
-    
+    # Gmail-friendly concise email content
+    subject = f"Emergency Alert: {severity.upper()} Trauma Case - Immediate Response Needed"
+
     message_body = f"""
     <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; border: 2px solid #dc2626; border-radius: 8px; padding: 20px; background: #fff;">
-            
-            <div style="text-align: center; border-bottom: 2px solid #dc2626; padding-bottom: 15px; margin-bottom: 20px;">
-                <h2 style="color: #dc2626; margin: 0;">🚑 EMERGENCY CASE ASSIGNED</h2>
-            </div>
-            
-            <div style="background: #f3f4f6; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                <p style="margin: 0; font-weight: bold; font-size: 18px; color: #dc2626;">Severity: {severity.upper()}</p>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <h3 style="color: #164a8a; margin-top: 0;">Case Details:</h3>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <tr style="border-bottom: 1px solid #e5e7eb;">
-                        <td style="padding: 10px; font-weight: bold; color: #374151;">Patient Name:</td>
-                        <td style="padding: 10px; color: #6b7280;">{patient_name}</td>
-                    </tr>
-                    <tr style="border-bottom: 1px solid #e5e7eb;">
-                        <td style="padding: 10px; font-weight: bold; color: #374151;">Severity:</td>
-                        <td style="padding: 10px; color: #dc2626; font-weight: bold;">{severity.upper()}</td>
-                    </tr>
-                    <tr style="border-bottom: 1px solid #e5e7eb;">
-                        <td style="padding: 10px; font-weight: bold; color: #374151;">Location:</td>
-                        <td style="padding: 10px; color: #6b7280;">{location}</td>
-                    </tr>
-                    <tr style="border-bottom: 1px solid #e5e7eb;">
-                        <td style="padding: 10px; font-weight: bold; color: #374151;">Distance to Hospital:</td>
-                        <td style="padding: 10px; color: #6b7280;">{distance_km} km</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; font-weight: bold; color: #374151;">Time:</td>
-                        <td style="padding: 10px; color: #6b7280;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td>
-                    </tr>
-                </table>
-            </div>
-            
-            <div style="background: #fef3c7; padding: 15px; border-left: 4px solid #f59e0b; border-radius: 4px; margin-bottom: 15px;">
-                <p style="margin: 0; font-weight: bold; color: #92400e;">⚠️ ACTION REQUIRED:</p>
-                <p style="margin: 10px 0 0 0; color: #78350f;">Please prepare your Emergency Unit immediately. Patient transport ETA: {distance_km / 50 * 60:.0f} minutes (estimated).</p>
-            </div>
-            
-            <div style="background: #f0fdf4; padding: 15px; border-left: 4px solid #15803d; border-radius: 4px;">
-                <p style="margin: 0; font-weight: bold; color: #166534;">✓ Assigned Hospital:</p>
-                <p style="margin: 10px 0 0 0; color: #15803d; font-size: 18px; font-weight: bold;">{hospital_name}</p>
-            </div>
-            
-            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; text-align: center;">
-                <p style="margin: 0;">This is an automated message from the Quantum Healthcare Emergency Allocation System.</p>
-                <p style="margin: 5px 0 0 0;">Do not reply to this email. For support, contact the system administrator.</p>
-            </div>
-            
+    <body style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937; margin: 0; padding: 16px;">
+        <div style="max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px;">
+            <h2 style="margin: 0 0 12px; color: #b91c1c;">Emergency Alert - Critical Case</h2>
+            <p style="margin: 0 0 12px;">Dear Doctor / Medical Staff,</p>
+            <p style="margin: 0 0 12px;">A critical trauma case has been reported and requires immediate attention.</p>
+
+            <table style="width: 100%; border-collapse: collapse; margin: 0 0 12px;">
+                <tr>
+                    <td style="padding: 6px 0; font-weight: 700; width: 180px;">Case Type:</td>
+                    <td style="padding: 6px 0;">Road Accident / Trauma</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-weight: 700;">Condition:</td>
+                    <td style="padding: 6px 0;">{severity.upper()}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-weight: 700;">Priority Level:</td>
+                    <td style="padding: 6px 0;">High</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-weight: 700;">Location:</td>
+                    <td style="padding: 6px 0;">{location}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-weight: 700;">Hospital:</td>
+                    <td style="padding: 6px 0;">{hospital_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-weight: 700;">Time:</td>
+                    <td style="padding: 6px 0;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td>
+                </tr>
+            </table>
+
+            <p style="margin: 0 0 12px;">All available doctors, especially specialists, are requested to report to the Emergency Department without delay.</p>
+            <p style="margin: 0 0 12px; font-weight: 700; color: #b91c1c;">Please acknowledge and proceed immediately.</p>
+            <p style="margin: 0; color: #6b7280; font-size: 12px;">Hospital Emergency Alert System</p>
         </div>
     </body>
     </html>
