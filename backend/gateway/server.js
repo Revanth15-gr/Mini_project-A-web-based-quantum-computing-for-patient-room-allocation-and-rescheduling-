@@ -258,56 +258,44 @@ const sendEmergencySms = async ({ to, message }) => {
   return { sent: true, sid: sms.sid }
 }
 
-const buildEmergencyEmailMessage = ({ caseDetails = {}, assignedHospital = {} }) => {
-  const caseId = escapeXml(caseDetails.caseId || 'Unknown Case')
-  const patientName = escapeXml(caseDetails.patientName || 'Unknown Patient')
+const buildEmergencyEmailMessage = ({ caseDetails = {} }) => {
   const severity = escapeXml(caseDetails.severity || 'Unknown')
   const location = escapeXml(caseDetails.location || 'Unknown Location')
   const incident = escapeXml(caseDetails.incident || 'Emergency incident')
-  const eta = escapeXml(caseDetails.eta || 'N/A')
-  const hospitalName = escapeXml(assignedHospital.name || 'Unassigned Hospital')
+  const caseType = escapeXml(caseDetails.caseType || incident || 'Road Accident / Trauma')
+  const timeLabel = escapeXml(caseDetails.time || 'Immediate')
 
   const html = `
 <!DOCTYPE html>
 <html>
-  <body style="margin:0;padding:20px;background:#070f2a;font-family:Arial,sans-serif;color:#f3f4f6;">
-    <div style="max-width:640px;margin:0 auto;">
-      <div style="background:#d82d2d;border-radius:16px;padding:28px 24px;text-align:center;color:#ffffff;font-weight:700;">
-        <div style="font-size:62px;line-height:1;">🚨</div>
-        <div style="font-size:40px;line-height:1.1;margin-top:10px;letter-spacing:1px;">EMERGENCY ALERT</div>
-        <div style="font-size:68px;line-height:1;margin-top:14px;">${caseId}</div>
-      </div>
+  <body>
+    <h2>🚨 EMERGENCY CASE ALERT 🚨</h2>
+    <p>A patient has been admitted in critical condition.</p>
 
-      <div style="margin-top:18px;background:#1f2024;border-left:5px solid #ef4444;border-radius:12px;padding:20px 18px;">
-        <table role="presentation" style="width:100%;border-collapse:collapse;font-size:18px;line-height:1.45;">
-          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Patient ID:</td><td style="padding:6px 0;">${patientName}</td></tr>
-          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Priority:</td><td style="padding:6px 0;color:#f87171;font-weight:700;">${severity}</td></tr>
-          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Location:</td><td style="padding:6px 0;">${location}</td></tr>
-          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Incident Type:</td><td style="padding:6px 0;">${incident}</td></tr>
-          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">Assigned Hospital:</td><td style="padding:6px 0;">${hospitalName}</td></tr>
-          <tr><td style="color:#f87171;font-weight:700;padding:6px 0;white-space:nowrap;">ETA:</td><td style="padding:6px 0;">${eta}</td></tr>
-        </table>
+    <p><strong>Details:</strong></p>
+    <ul>
+      <li><strong>Case Type:</strong> ${caseType}</li>
+      <li><strong>Patient Condition:</strong> ${severity}</li>
+      <li><strong>Location:</strong> ${location}</li>
+      <li><strong>Time:</strong> ${timeLabel}</li>
+    </ul>
 
-        <div style="margin-top:16px;background:#4db351;border-radius:12px;padding:16px 14px;text-align:center;color:#ffffff;font-size:40px;line-height:1;">⚠️</div>
-        <div style="margin-top:8px;background:#4db351;border-radius:12px;padding:16px 14px;text-align:center;color:#ffffff;font-size:30px;font-weight:800;letter-spacing:0.6px;">
-          PLEASE PREPARE IMMEDIATELY
-        </div>
-      </div>
-    </div>
+    <p>All available doctors are requested to respond urgently.</p>
+    <p>- Hospital Emergency System</p>
   </body>
 </html>
 `
 
   const text =
-    `EMERGENCY ALERT\n` +
-    `${caseId}\n\n` +
-    `Patient ID: ${patientName}\n` +
-    `Priority: ${severity}\n` +
-    `Location: ${location}\n` +
-    `Incident Type: ${incident}\n` +
-    `Assigned Hospital: ${hospitalName}\n` +
-    `ETA: ${eta}\n\n` +
-    `PLEASE PREPARE IMMEDIATELY`
+    `🚨 EMERGENCY CASE ALERT 🚨\n\n` +
+    `A patient has been admitted in critical condition.\n\n` +
+    `Details:\n` +
+    `- Case Type: ${caseType}\n` +
+    `- Patient Condition: ${severity}\n` +
+    `- Location: ${location}\n` +
+    `- Time: ${timeLabel}\n\n` +
+    `All available doctors are requested to respond urgently.\n\n` +
+    `- Hospital Emergency System`
 
   return { html, text }
 }
@@ -922,7 +910,7 @@ app.post('/api/emergency/notify', async (req, res) => {
       : 'N/A'
     const availableRooms = assignedHospital.availableRooms ?? assignedHospital.beds ?? 'N/A'
 
-    const emailSubject = `🚨 Emergency Alert ${caseId}: ${patientName} assigned to ${hospitalName}`
+    const emailSubject = `🚨 EMERGENCY CASE ALERT 🚨 | ${severity}`
     const baseMessage =
       `Emergency ${caseId}. Patient ${patientName}. Severity ${severity}. Incident: ${incident}. ` +
       `Assigned Hospital: ${hospitalName}. Distance ${distance}. Available rooms ${availableRooms}. ETA ${eta}.`
