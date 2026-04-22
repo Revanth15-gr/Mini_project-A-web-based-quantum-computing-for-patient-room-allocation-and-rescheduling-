@@ -139,6 +139,27 @@ const TRACKING_STATE_META = {
   dropoff: { label: 'Dropoff', color: '#15803d', bg: '#dcfce7' },
 }
 
+const EMERGENCY_API_ENDPOINTS = {
+  assign: ['/api/quantum-emergency', 'http://127.0.0.1:4000/api/quantum-emergency', 'http://localhost:4000/api/quantum-emergency'],
+  notify: ['/api/emergency/notify', 'http://127.0.0.1:4000/api/emergency/notify', 'http://localhost:4000/api/emergency/notify'],
+  tracking: ['/api/quantum-tracking', 'http://127.0.0.1:4000/api/quantum-tracking', 'http://localhost:4000/api/quantum-tracking'],
+}
+
+async function fetchWithFallback(urls, options = {}) {
+  let lastError = null
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, options)
+      return { response, url }
+    } catch (error) {
+      lastError = new Error(`${url} -> ${error?.message || 'request failed'}`)
+    }
+  }
+
+  throw lastError || new Error('Failed to fetch from all configured endpoints')
+}
+
 const AMBULANCE_STATE_META = {
   available: { label: 'Available', color: '#166534', bg: '#dcfce7' },
   requested: { label: 'Requested', color: '#0369a1', bg: '#e0f2fe' },
@@ -160,6 +181,7 @@ function Emergency() {
   const [assignedHospital, setAssignedHospital] = useState(null)
   const [emailSent, setEmailSent] = useState(false)
   const [emailStatusMessage, setEmailStatusMessage] = useState('')
+  const [notifySummary, setNotifySummary] = useState(null)
   const [trackingId, setTrackingId] = useState(null)
   const [trackingLive, setTrackingLive] = useState(null)
 
@@ -260,6 +282,7 @@ function Emergency() {
     setError('')
     setEmailSent(false)
     setEmailStatusMessage('')
+    setNotifySummary(null)
 
     try {
       const payload = {
@@ -276,7 +299,7 @@ function Emergency() {
         hospitals: nearbyHospitals,
       }
 
-      const response = await fetch('/api/quantum-emergency', {
+      const { response } = await fetchWithFallback(EMERGENCY_API_ENDPOINTS.assign, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -313,7 +336,7 @@ function Emergency() {
         },
       }
 
-      const notifyResponse = await fetch('/api/emergency/notify', {
+      const { response: notifyResponse } = await fetchWithFallback(EMERGENCY_API_ENDPOINTS.notify, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(notifyPayload),
@@ -322,6 +345,11 @@ function Emergency() {
       const notifyData = await notifyResponse.json().catch(() => ({}))
       const deliveredEmail = Boolean(notifyData?.channels?.email?.sent)
       setEmailSent(deliveredEmail)
+      setNotifySummary({
+        email: notifyData?.recipients?.email || null,
+        preview: notifyData?.preview || '',
+        channels: notifyData?.channels || null,
+      })
 
       if (deliveredEmail) {
         setEmailStatusMessage(`Notification email sent to ${notifyData?.recipients?.email || 'assigned hospital'}`)
@@ -333,7 +361,11 @@ function Emergency() {
         setEmailStatusMessage(`Email not sent: ${reason}`)
       }
     } catch (requestError) {
-      setError(requestError.message || 'Unable to assign emergency hospital')
+      if (String(requestError?.message || '').toLowerCase().includes('failed to fetch')) {
+        setError('Unable to reach emergency services. Ensure gateway backend is running on port 4000, then retry.')
+      } else {
+        setError(requestError.message || 'Unable to assign emergency hospital')
+      }
     } finally {
       setLoading(false)
     }
@@ -347,7 +379,8 @@ function Emergency() {
     let active = true
     const pollTracking = async () => {
       try {
-        const response = await fetch(`/api/quantum-tracking/${trackingId}`)
+        const trackingUrls = EMERGENCY_API_ENDPOINTS.tracking.map((base) => `${base}/${trackingId}`)
+        const { response } = await fetchWithFallback(trackingUrls)
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           throw new Error(payload.error || `Tracking API returned ${response.status}`)
@@ -491,7 +524,27 @@ function Emergency() {
 
         {error ? <p style={{ color: '#b91c1c', marginTop: '0.75rem' }}>{error}</p> : null}
         {emailStatusMessage ? (
-          <p style={{ color: emailSent ? '#15803d' : '#b45309', marginTop: '0.75rem' }}>{emailStatusMessage}</p>
+          <div
+            style={{
+              marginTop: '0.75rem',
+              borderRadius: '10px',
+              border: `1px solid ${emailSent ? '#86efac' : '#fcd34d'}`,
+              background: emailSent ? '#f0fdf4' : '#fffbeb',
+              padding: '0.7rem 0.85rem',
+            }}
+          >
+            <p style={{ color: emailSent ? '#166534' : '#92400e', margin: 0, fontWeight: 600 }}>{emailStatusMessage}</p>
+            {notifySummary?.email ? (
+              <p style={{ margin: '0.35rem 0 0', color: '#475569', fontSize: '0.85rem' }}>
+                Recipient: {notifySummary.email}
+              </p>
+            ) : null}
+            {notifySummary?.preview ? (
+              <p style={{ margin: '0.35rem 0 0', color: '#475569', fontSize: '0.85rem' }}>
+                Preview: {notifySummary.preview}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </section>
 
