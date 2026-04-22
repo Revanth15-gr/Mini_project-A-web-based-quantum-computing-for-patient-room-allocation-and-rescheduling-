@@ -1139,7 +1139,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
 })
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✓ QAOA Gateway listening on http://localhost:${PORT}`)
   console.log(`✓ MongoDB URI configured: ${MONGODB_URI ? 'Yes' : 'No'}`)
   console.log(`\n📚 API Endpoints:`)

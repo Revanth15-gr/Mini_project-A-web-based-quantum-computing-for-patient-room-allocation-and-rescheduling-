@@ -3,8 +3,8 @@ services:
     name: mini-project-app
     runtime: node
     runtimeVersion: 22
-    buildCommand: npm install && npm --prefix backend/gateway install && npm run build
-    startCommand: node backend/gateway/server.js
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
