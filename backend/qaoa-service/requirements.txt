@@ -1,6 +1,6 @@
-fastapi==0.115.6
-uvicorn==0.30.6
-pydantic==2.1.1
+fastapi==0.95.2
+uvicorn==0.23.2
+pydantic==1.10.12
 qiskit==1.2.4
 qiskit-aer==0.14.2
 qiskit-algorithms==0.3.0
