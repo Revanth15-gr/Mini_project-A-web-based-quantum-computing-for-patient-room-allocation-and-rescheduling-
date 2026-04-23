@@ -2,9 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies needed for building
+# Install system dependencies for building C/C++ extensions
 RUN apt-get update && apt-get install -y \
     build-essential \
+    cmake \
+    libsymengine-dev \
+    libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
