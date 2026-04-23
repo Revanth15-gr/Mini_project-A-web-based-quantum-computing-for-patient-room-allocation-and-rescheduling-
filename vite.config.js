@@ -10,7 +10,11 @@ export default defineConfig({
       ignored: ['**/.venv/**', '**/venv/**', '**/__pycache__/**'],
     },
     proxy: {
-      '/api': 'http://127.0.0.1:4000',
+      '/api': 'http://127.0.0.1:10000',
     },
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
   },
 })
