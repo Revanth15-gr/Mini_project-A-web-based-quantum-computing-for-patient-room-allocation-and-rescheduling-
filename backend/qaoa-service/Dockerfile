@@ -2,13 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for building and pre-built symengine
+# Install system dependencies and build tools
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
-    libsymengine0d \
     && rm -rf /var/lib/apt/lists/*
+
+# Pre-install setuptools and setuptools-scm to fix pkg_resources error
+RUN pip install --no-cache-dir setuptools setuptools-scm wheel
 
 # Copy requirements
 COPY requirements.txt .
@@ -16,7 +18,7 @@ COPY requirements.txt .
 # Install Python dependencies with longer timeout
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
-# Copy application
+# Copy application  
 COPY . .
 
 # Expose port
