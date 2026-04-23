@@ -1,22 +1,19 @@
-FROM python:3.11
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for building C/C++ extensions and mathematical libraries
+# Install system dependencies for building and pre-built symengine
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
-    libboost-dev \
-    libgmp-dev \
-    libmpc-dev \
-    libmpfr-dev \
+    libsymengine0d \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies with longer timeout for builds
+# Install Python dependencies with longer timeout
 RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
 # Copy application
