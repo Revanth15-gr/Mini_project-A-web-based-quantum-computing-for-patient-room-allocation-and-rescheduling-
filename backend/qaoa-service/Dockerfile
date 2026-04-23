@@ -1,20 +1,23 @@
-FROM python:3.11-slim
+FROM python:3.11
 
 WORKDIR /app
 
-# Install system dependencies for building C/C++ extensions
+# Install system dependencies for building C/C++ extensions and mathematical libraries
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
-    libsymengine-dev \
-    libboost-all-dev \
+    git \
+    libboost-dev \
+    libgmp-dev \
+    libmpc-dev \
+    libmpfr-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies with longer timeout for builds
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
 # Copy application
 COPY . .
